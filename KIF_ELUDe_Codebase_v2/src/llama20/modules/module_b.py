@@ -417,7 +417,7 @@ class OptimizedProbeRobot:
 def run_module_b():
     # You can tweak defaults here for your box
     cfg = ProbeConfig(
-        layers=list(range(32)),      # adapt to model depth (e.g., Llama-2-7B has 32)
+        layers=[11,12,13,14],      # adapt to model depth (e.g., Llama-2-7B has 32)
         targets=["mlp"],
         batch_size=32,               # try 16/32/64 based on VRAM
         max_length=128,
