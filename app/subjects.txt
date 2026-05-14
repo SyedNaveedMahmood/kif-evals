@@ -1,0 +1,14 @@
+# KIF Dataset - Subjects to Unlearn
+# One subject per line. Lines starting with # are comments.
+
+Taylor Swift
+Beyoncé
+Ed Sheeran
+Ariana Grande
+Queen (band)
+Drake (musician)
+Eminem
+Michael Jackson
+Katy Perry
+Kanye West
+Arijit Singh

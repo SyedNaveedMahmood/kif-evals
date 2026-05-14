@@ -1,0 +1,73 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments and local environment files
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Runtime logs and scheduler output
+*.log
+*.out
+*.err
+logs/
+**/logs/
+slurm-*.out
+slurm-*.err
+
+# Pipeline-generated caches and outputs
+cache/
+**/cache/
+outputs/
+**/outputs/
+runs/
+**/runs/
+wandb/
+**/wandb/
+
+# Model weights, adapters, and checkpoints
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.gguf
+*.onnx
+checkpoint-*/
+**/checkpoint-*/
+
+# Bulk activation/signature/capsule dumps
+*.pkl
+*.pkl.gz
+*.pickle
+*.pickle.gz
+*.joblib
+*.npy
+*.npz
+*_capsule.pkl.gz
+activation_index.json
+activation_report.json
+
+# Generated evaluations, sweeps, plots, and visualizations
+**/eval_clean/
+**/eval_elude/
+**/elude20_benchmark/
+**/sweeps/
+**/signatures/
+**/capsules/
+**/sentinel/
+**/global_adapters/
+**/plots/
+**/visualizations/
