@@ -1,0 +1,262 @@
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2026-05-15 18:59:50,853 - root - WARNING - [module_a.py:41] - Extra NLP packages not available. Some advanced features will be disabled.
+The tokenizer you are loading from 'outputs/model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/quantizers/auto.py:239: UserWarning: You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading already has a `quantization_config` attribute. The `quantization_config` from the model will be used.
+  warnings.warn(warning_msg)
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:04<00:04,  4.21s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.09s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.41s/it]
+2026-05-15 19:03:37,123 - E-final - INFO - [module_e.py:529] - [Init] Loaded 11 capsules
+2026-05-15 19:03:38,177 - sentence_transformers.base.model - INFO - [model.py:183] - No device provided, using cuda:0
+2026-05-15 19:03:38,518 - sentence_transformers.base.model - INFO - [model.py:992] - Loading SentenceTransformer model from sentence-transformers/all-MiniLM-L6-v2.
+2026-05-15 19:03:47,122 - E-final - INFO - [module_e.py:304] - [Router] SBERT ready
+2026-05-15 19:03:47,133 - E-final - INFO - [module_e.py:230] - [RefusalDir] Computing refusal direction via system-prompt contrast...
+2026-05-15 19:03:54,801 - E-final - INFO - [module_e.py:254] - [RefusalDir] Done, dim=4096, raw norm=45.6538
+2026-05-15 19:03:54,801 - E-final - INFO - [module_e.py:513] - [Init] Capsules: 11 | Refusal steering: ON
+2026-05-15 19:03:54,801 - E-final - INFO - [module_e.py:588] - [Calibrate] Subject-targeted calibration
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 23.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 262.13it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.53it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 274.51it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.69it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.50it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 288.59it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 287.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.99it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 289.60it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.71it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 275.05it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 271.99it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.24it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 288.39it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 281.27it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 291.55it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 270.57it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 269.44it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 264.93it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 276.43it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 287.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.85it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.15it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.61it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.89it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.22it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 288.09it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 287.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 268.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.95it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.30it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.61it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.48it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.91it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.93it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 293.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 289.28it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 270.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 288.27it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.31it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 287.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 295.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 291.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.52it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.11it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 288.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.48it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 289.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.35it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.60it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 291.21it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.59it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.93it/s]
+2026-05-15 19:04:01,596 - E-final - INFO - [module_e.py:612] - [Calibrate] Updated 11 subjects
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 271.97it/s]
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:468: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 261.00it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 267.70it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 250.36it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 257.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 273.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.26it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 292.29it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 273.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 270.29it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 296.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.69it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 262.09it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 294.56it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 270.98it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 275.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 293.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 299.70it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 260.56it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 10.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 299.32it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 188.78it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 276.80it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.23it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 275.34it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 267.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.30it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 262.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 298.85it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 281.44it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 271.83it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 276.47it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 244.51it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 298.97it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 295.83it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 235.26it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.70it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.70it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 265.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 301.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 295.94it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 269.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.14it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 258.40it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 267.44it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 267.17it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.80it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 274.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 286.24it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 302.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 302.58it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 270.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 289.20it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 253.60it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 294.34it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 276.34it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.19it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.75it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 299.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 299.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 304.62it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 281.89it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 269.52it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 294.48it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 244.84it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 300.52it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 276.16it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.90it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.95it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 302.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 285.64it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.67it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 271.18it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 296.98it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.77it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.24it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 279.55it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 297.79it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.38it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 305.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 273.00it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 268.54it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 297.26it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 297.11it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 301.36it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  9.37it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  9.35it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 193.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 274.17it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 302.05it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 263.56it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 250.02it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 248.20it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 305.37it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 301.68it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 231.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 294.01it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.54it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 301.12it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 281.63it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 258.46it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 297.53it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 293.33it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 50.19it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.53it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  4.52it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 283.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 280.44it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 299.83it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.53it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 281.89it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 295.21it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 290.32it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 284.92it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 300.90it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 282.73it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 271.78it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 296.82it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 294.96it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 301.25it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 260.99it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 296.04it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.02it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 302.47it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 278.71it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 277.03it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 265.56it/s]
+2026-05-15 19:23:30,516 - E-final - INFO - [module_e.py:731] - [Harvest] 132 prompts | 132 logged to interactions.jsonl | 0 dropped (degenerate)
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2026-05-15 19:25:58,140 - root - WARNING - [module_a.py:41] - Extra NLP packages not available. Some advanced features will be disabled.
+<frozen runpy>:128: RuntimeWarning: 'llama20.modules.module7' found in sys.modules after import of package 'llama20.modules', but prior to execution of 'llama20.modules.module7'; this may result in unpredictable behaviour
+The tokenizer you are loading from 'outputs/model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/quantizers/auto.py:239: UserWarning: You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading already has a `quantization_config` attribute. The `quantization_config` from the model will be used.
+  warnings.warn(warning_msg)
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:04<00:04,  4.04s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.06s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:04<00:00,  2.36s/it]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:02<00:02,  2.70s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:03<00:00,  1.32s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:03<00:00,  1.53s/it]
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.85s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.03it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.10s/it]
+2026-05-15 19:26:21,391 - M7-repaware - INFO - [module7.py:131] - [LoRA] r=4, alpha=8, targets=['v_proj', 'o_proj', 'q_proj']
+2026-05-15 19:26:44,271 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Ariana Grande', dim=4096
+2026-05-15 19:27:03,037 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Arijit Singh', dim=4096
+2026-05-15 19:27:22,747 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Beyoncé', dim=4096
+2026-05-15 19:27:38,758 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Drake (musician)', dim=4096
+2026-05-15 19:27:54,157 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Ed Sheeran', dim=4096
+2026-05-15 19:28:12,843 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Eminem', dim=4096
+2026-05-15 19:28:32,500 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Kanye West', dim=4096
+2026-05-15 19:28:48,458 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Katy Perry', dim=4096
+2026-05-15 19:29:08,361 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Michael Jackson', dim=4096
+2026-05-15 19:29:24,506 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Queen (band)', dim=4096
+2026-05-15 19:29:39,509 - M7-repaware - INFO - [module7.py:178] - [Sig] Loaded signature for 'Taylor Swift', dim=4096
+2026-05-15 19:29:40,405 - M7-repaware - INFO - [module7.py:558] - [Sig] Loaded 11 subject signatures
+2026-05-15 19:29:40,409 - M7-repaware - INFO - [module7.py:376] - [CapsuleOutputs] Loaded 132 capsule-suppressed outputs
+2026-05-15 19:33:01,266 - M7-repaware - INFO - [module7.py:398] - [Pairs] Generating y_bad — 198 prompts, 13 batches...
+y_bad (base model):   0%|          | 0/13 [00:00<?, ?batch/s]y_bad (base model):   8%|▊         | 1/13 [00:08<01:41,  8.45s/batch]y_bad (base model):  15%|█▌        | 2/13 [00:11<00:56,  5.10s/batch]y_bad (base model):  23%|██▎       | 3/13 [00:13<00:40,  4.02s/batch]y_bad (base model):  31%|███       | 4/13 [00:16<00:32,  3.57s/batch]y_bad (base model):  38%|███▊      | 5/13 [00:19<00:26,  3.31s/batch]y_bad (base model):  46%|████▌     | 6/13 [00:22<00:21,  3.13s/batch]y_bad (base model):  54%|█████▍    | 7/13 [00:25<00:18,  3.00s/batch]y_bad (base model):  62%|██████▏   | 8/13 [00:27<00:14,  2.92s/batch]y_bad (base model):  69%|██████▉   | 9/13 [00:30<00:11,  2.91s/batch]y_bad (base model):  77%|███████▋  | 10/13 [00:33<00:08,  2.89s/batch]y_bad (base model):  85%|████████▍ | 11/13 [00:36<00:05,  2.86s/batch]y_bad (base model):  92%|█████████▏| 12/13 [00:39<00:02,  2.84s/batch]y_bad (base model): 100%|██████████| 13/13 [00:41<00:00,  2.81s/batch]y_bad (base model): 100%|██████████| 13/13 [00:41<00:00,  3.23s/batch]
+2026-05-15 19:33:43,245 - M7-repaware - INFO - [module7.py:415] - [Pairs] y+ sources: capsule=132, fallback=66
+2026-05-15 19:33:43,248 - M7-repaware - INFO - [module7.py:433] - [Pairs] Generating anchor y_good — 800 prompts, 50 batches...
+anchor y_good:   0%|          | 0/50 [00:00<?, ?batch/s]anchor y_good:   2%|▏         | 1/50 [00:02<02:15,  2.76s/batch]anchor y_good:   4%|▍         | 2/50 [00:05<02:12,  2.76s/batch]anchor y_good:   6%|▌         | 3/50 [00:08<02:09,  2.76s/batch]anchor y_good:   8%|▊         | 4/50 [00:11<02:07,  2.77s/batch]anchor y_good:  10%|█         | 5/50 [00:13<02:04,  2.77s/batch]anchor y_good:  12%|█▏        | 6/50 [00:16<02:02,  2.77s/batch]anchor y_good:  14%|█▍        | 7/50 [00:19<01:59,  2.77s/batch]anchor y_good:  16%|█▌        | 8/50 [00:22<01:56,  2.78s/batch]anchor y_good:  18%|█▊        | 9/50 [00:24<01:54,  2.78s/batch]anchor y_good:  20%|██        | 10/50 [00:27<01:51,  2.79s/batch]anchor y_good:  22%|██▏       | 11/50 [00:30<01:48,  2.79s/batch]anchor y_good:  24%|██▍       | 12/50 [00:33<01:45,  2.79s/batch]anchor y_good:  26%|██▌       | 13/50 [00:36<01:43,  2.79s/batch]anchor y_good:  28%|██▊       | 14/50 [00:38<01:40,  2.79s/batch]anchor y_good:  30%|███       | 15/50 [00:41<01:37,  2.79s/batch]anchor y_good:  32%|███▏      | 16/50 [00:44<01:34,  2.79s/batch]anchor y_good:  34%|███▍      | 17/50 [00:47<01:32,  2.79s/batch]anchor y_good:  36%|███▌      | 18/50 [00:50<01:29,  2.79s/batch]anchor y_good:  38%|███▊      | 19/50 [00:52<01:25,  2.77s/batch]anchor y_good:  40%|████      | 20/50 [00:55<01:22,  2.76s/batch]anchor y_good:  42%|████▏     | 21/50 [00:58<01:19,  2.75s/batch]anchor y_good:  44%|████▍     | 22/50 [01:01<01:18,  2.79s/batch]anchor y_good:  46%|████▌     | 23/50 [01:03<01:15,  2.79s/batch]anchor y_good:  48%|████▊     | 24/50 [01:06<01:13,  2.81s/batch]anchor y_good:  50%|█████     | 25/50 [01:09<01:10,  2.82s/batch]anchor y_good:  52%|█████▏    | 26/50 [01:12<01:07,  2.83s/batch]anchor y_good:  54%|█████▍    | 27/50 [01:15<01:04,  2.82s/batch]anchor y_good:  56%|█████▌    | 28/50 [01:18<01:01,  2.81s/batch]anchor y_good:  58%|█████▊    | 29/50 [01:20<00:58,  2.81s/batch]anchor y_good:  60%|██████    | 30/50 [01:23<00:56,  2.81s/batch]anchor y_good:  62%|██████▏   | 31/50 [01:26<00:53,  2.82s/batch]anchor y_good:  64%|██████▍   | 32/50 [01:29<00:50,  2.82s/batch]anchor y_good:  66%|██████▌   | 33/50 [01:32<00:47,  2.80s/batch]anchor y_good:  68%|██████▊   | 34/50 [01:34<00:44,  2.79s/batch]anchor y_good:  70%|███████   | 35/50 [01:37<00:41,  2.78s/batch]anchor y_good:  72%|███████▏  | 36/50 [01:40<00:38,  2.77s/batch]anchor y_good:  74%|███████▍  | 37/50 [01:43<00:35,  2.77s/batch]anchor y_good:  76%|███████▌  | 38/50 [01:45<00:33,  2.77s/batch]anchor y_good:  78%|███████▊  | 39/50 [01:48<00:30,  2.77s/batch]anchor y_good:  80%|████████  | 40/50 [01:51<00:27,  2.77s/batch]anchor y_good:  82%|████████▏ | 41/50 [01:54<00:24,  2.77s/batch]anchor y_good:  84%|████████▍ | 42/50 [01:56<00:22,  2.76s/batch]anchor y_good:  86%|████████▌ | 43/50 [01:59<00:19,  2.77s/batch]anchor y_good:  88%|████████▊ | 44/50 [02:02<00:16,  2.76s/batch]anchor y_good:  90%|█████████ | 45/50 [02:05<00:13,  2.76s/batch]anchor y_good:  92%|█████████▏| 46/50 [02:08<00:11,  2.76s/batch]anchor y_good:  94%|█████████▍| 47/50 [02:10<00:08,  2.79s/batch]anchor y_good:  96%|█████████▌| 48/50 [02:13<00:05,  2.79s/batch]anchor y_good:  98%|█████████▊| 49/50 [02:16<00:02,  2.78s/batch]anchor y_good: 100%|██████████| 50/50 [02:19<00:00,  2.79s/batch]anchor y_good: 100%|██████████| 50/50 [02:19<00:00,  2.78s/batch]
+2026-05-15 19:36:02,497 - M7-repaware - INFO - [module7.py:582] - [Pairs] Total: 1600 (subject=800, anchor=800)
+2026-05-15 19:36:02,522 - M7-repaware - INFO - [module7.py:513] - [EWC] Computing Fisher diagonal over 30 texts...
+Fisher diag:   0%|          | 0/30 [00:00<?, ?text/s]/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:468: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Fisher diag:   3%|▎         | 1/30 [00:03<01:52,  3.89s/text]Fisher diag:   7%|▋         | 2/30 [00:08<02:06,  4.50s/text]Fisher diag:  10%|█         | 3/30 [00:10<01:28,  3.27s/text]Fisher diag:  13%|█▎        | 4/30 [00:12<01:08,  2.65s/text]Fisher diag:  17%|█▋        | 5/30 [00:14<00:58,  2.32s/text]Fisher diag:  20%|██        | 6/30 [00:15<00:50,  2.11s/text]Fisher diag:  23%|██▎       | 7/30 [00:17<00:45,  1.97s/text]Fisher diag:  27%|██▋       | 8/30 [00:19<00:41,  1.89s/text]Fisher diag:  30%|███       | 9/30 [00:20<00:38,  1.83s/text]Fisher diag:  33%|███▎      | 10/30 [00:22<00:35,  1.78s/text]Fisher diag:  37%|███▋      | 11/30 [00:24<00:33,  1.76s/text]Fisher diag:  40%|████      | 12/30 [00:25<00:31,  1.74s/text]Fisher diag:  43%|████▎     | 13/30 [00:27<00:27,  1.63s/text]Fisher diag:  47%|████▋     | 14/30 [00:29<00:26,  1.65s/text]Fisher diag:  50%|█████     | 15/30 [00:30<00:24,  1.66s/text]Fisher diag:  53%|█████▎    | 16/30 [00:32<00:23,  1.68s/text]Fisher diag:  57%|█████▋    | 17/30 [00:34<00:21,  1.68s/text]Fisher diag:  60%|██████    | 18/30 [00:35<00:20,  1.69s/text]Fisher diag:  63%|██████▎   | 19/30 [00:37<00:18,  1.69s/text]Fisher diag:  67%|██████▋   | 20/30 [00:38<00:14,  1.41s/text]Fisher diag:  70%|███████   | 21/30 [00:39<00:13,  1.50s/text]Fisher diag:  73%|███████▎  | 22/30 [00:41<00:12,  1.55s/text]Fisher diag:  77%|███████▋  | 23/30 [00:43<00:11,  1.60s/text]Fisher diag:  80%|████████  | 24/30 [00:45<00:09,  1.63s/text]Fisher diag:  83%|████████▎ | 25/30 [00:46<00:08,  1.65s/text]Fisher diag:  87%|████████▋ | 26/30 [00:48<00:06,  1.66s/text]Fisher diag:  90%|█████████ | 27/30 [00:50<00:04,  1.67s/text]Fisher diag:  93%|█████████▎| 28/30 [00:51<00:03,  1.67s/text]Fisher diag:  97%|█████████▋| 29/30 [00:53<00:01,  1.67s/text]Fisher diag: 100%|██████████| 30/30 [00:55<00:00,  1.68s/text]Fisher diag: 100%|██████████| 30/30 [00:55<00:00,  1.84s/text]
+2026-05-15 19:36:57,690 - M7-repaware - INFO - [module7.py:596] - [Train] Epoch 1/5
+2026-05-15 19:50:36,928 - M7-repaware - INFO - [module7.py:690] - [Epoch 1] DPO=0.6018 | UL=0.0222 | NT-UL=0.0000 | KL=0.0109 | EWC=0.00000376
+2026-05-15 19:50:36,989 - M7-repaware - INFO - [module7.py:596] - [Train] Epoch 2/5
+2026-05-15 20:04:07,510 - M7-repaware - INFO - [module7.py:690] - [Epoch 2] DPO=0.1372 | UL=0.0087 | NT-UL=0.0000 | KL=0.0935 | EWC=0.00001587
+2026-05-15 20:04:07,596 - M7-repaware - INFO - [module7.py:596] - [Train] Epoch 3/5
+2026-05-15 20:17:43,352 - M7-repaware - INFO - [module7.py:690] - [Epoch 3] DPO=0.0033 | UL=0.0009 | NT-UL=0.0000 | KL=0.0213 | EWC=0.00001884
+2026-05-15 20:17:43,480 - M7-repaware - INFO - [module7.py:596] - [Train] Epoch 4/5
+2026-05-15 20:31:21,638 - M7-repaware - INFO - [module7.py:690] - [Epoch 4] DPO=0.0012 | UL=0.0003 | NT-UL=0.0000 | KL=0.0079 | EWC=0.00001891
+2026-05-15 20:31:21,676 - M7-repaware - INFO - [module7.py:596] - [Train] Epoch 5/5
+2026-05-15 20:45:06,356 - M7-repaware - INFO - [module7.py:690] - [Epoch 5] DPO=0.0007 | UL=0.0003 | NT-UL=0.0000 | KL=0.0047 | EWC=0.00001889
+2026-05-15 20:45:06,937 - M7-repaware - INFO - [module7.py:739] - Saved adapter: outputs/sweeps/cfg_c_tau2p5_k2p5/seed42/module7/cfg_c_tau2p5_k2p5_seed42_20260515_204506

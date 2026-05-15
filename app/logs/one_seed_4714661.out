@@ -1,11 +1,11 @@
-[INFO] Job ID: 4714660
-[INFO] Node: uc2n910.localdomain
-[INFO] Commit: 0873b502ab0d24443b6f4152dc2d3977a6dd7c20
+[INFO] Job ID: 4714661
+[INFO] Node: uc3n072.localdomain
+[INFO] Commit: 381298a33374ee25e06ee23340d54ba51f0946de
 [INFO] Config: cfg_c_tau2p5_k2p5
-[INFO] tau=2.5 k=2.5 seed=17
+[INFO] tau=2.5 k=2.5 seed=23
 [INFO] CUDA_VISIBLE_DEVICES=0
-[INFO] Run root: outputs/sweeps/cfg_c_tau2p5_k2p5/seed17
-Fri May 15 18:30:18 2026       
+[INFO] Run root: outputs/sweeps/cfg_c_tau2p5_k2p5/seed23
+Fri May 15 18:55:29 2026       
 +-----------------------------------------------------------------------------------------+
 | NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
 |-----------------------------------------+------------------------+----------------------+
@@ -13,8 +13,8 @@ Fri May 15 18:30:18 2026
 | Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
 |                                         |                        |               MIG M. |
 |=========================================+========================+======================|
-|   0  NVIDIA A100 80GB PCIe          On  |   00000000:19:00.0 Off |                    0 |
-| N/A   41C    P0             52W /  300W |      23MiB /  81920MiB |      0%      Default |
+|   0  NVIDIA H100                    On  |   00000000:A6:00.0 Off |                    0 |
+| N/A   45C    P0             68W /  415W |      27MiB /  95830MiB |      0%      Default |
 |                                         |                        |             Disabled |
 +-----------------------------------------+------------------------+----------------------+
                                                                                          
@@ -23,37 +23,37 @@ Fri May 15 18:30:18 2026
 |  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
 |        ID   ID                                                               Usage      |
 |=========================================================================================|
-|    0   N/A  N/A            2553      G   /usr/libexec/Xorg                        17MiB |
+|    0   N/A  N/A            3788      G   /usr/libexec/Xorg                        17MiB |
 +-----------------------------------------------------------------------------------------+
-[CMD] /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/scripts/run_module_e_one.py --model_dir outputs/model --capsules_dir outputs/capsules --dataset_dir outputs/datasets --out_dir outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e --seed 17 --z_tau 2.5 --soft_gate_k 2.5 --harvest_variants_per_subject 50 --remap_json outputs/capsules/capsule_module_remap.json
+[CMD] /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/scripts/run_module_e_one.py --model_dir outputs/model --capsules_dir outputs/capsules --dataset_dir outputs/datasets --out_dir outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e --seed 23 --z_tau 2.5 --soft_gate_k 2.5 --harvest_variants_per_subject 50 --remap_json outputs/capsules/capsule_module_remap.json
 {
   "stage": "module_e",
   "model_dir": "outputs/model",
   "capsules_dir": "outputs/capsules",
   "dataset_dir": "outputs/datasets",
   "remap_json": "outputs/capsules/capsule_module_remap.json",
-  "out_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e",
-  "seed": 17,
+  "out_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e",
+  "seed": 23,
   "z_tau": 2.5,
   "soft_gate_k": 2.5,
   "harvest_variants_per_subject": 50,
   "use_4bit": true,
   "num_interactions": 132,
   "num_firing_events": 132,
-  "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/interactions.jsonl",
-  "firing_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/firing_events.jsonl",
-  "gate_stats": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/gate_stats.json"
+  "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/interactions.jsonl",
+  "firing_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/firing_events.jsonl",
+  "gate_stats": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/gate_stats.json"
 }
-[CMD] /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python -m llama20.modules.module7 --model_dir outputs/model --capsules_dir outputs/capsules --interactions_log outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/interactions.jsonl --out_dir outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7 --adapter_name_prefix cfg_c_tau2p5_k2p5_seed17 --seed 17 --epochs 5 --batch_size 2 --grad_accum 8 --lr 5e-06 --min_subject_pairs 800 --min_anchor_pairs 600 --variants_per_subject 60
+[CMD] /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python -m llama20.modules.module7 --model_dir outputs/model --capsules_dir outputs/capsules --interactions_log outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/interactions.jsonl --out_dir outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7 --adapter_name_prefix cfg_c_tau2p5_k2p5_seed23 --seed 23 --epochs 5 --batch_size 2 --grad_accum 8 --lr 5e-06 --min_subject_pairs 800 --min_anchor_pairs 600 --variants_per_subject 60
 {
-  "adapter_path": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7/cfg_c_tau2p5_k2p5_seed17_20260515_202239",
+  "adapter_path": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7/cfg_c_tau2p5_k2p5_seed23_20260515_201406",
   "run_config": {
     "model_dir": "outputs/model",
     "capsules_dir": "outputs/capsules",
-    "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/interactions.jsonl",
-    "out_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7",
-    "adapter_name_prefix": "cfg_c_tau2p5_k2p5_seed17",
-    "seed": 17,
+    "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/interactions.jsonl",
+    "out_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7",
+    "adapter_name_prefix": "cfg_c_tau2p5_k2p5_seed23",
+    "seed": 23,
     "epochs": 5,
     "batch_size": 2,
     "grad_accum": 8,
@@ -85,14 +85,14 @@ Fri May 15 18:30:18 2026
 }
 {
   "config_name": "cfg_c_tau2p5_k2p5",
-  "seed": 17,
+  "seed": 23,
   "z_tau": 2.5,
   "soft_gate_k": 2.5,
   "model_dir": "outputs/model",
   "capsules_dir": "outputs/capsules",
   "dataset_dir": "outputs/datasets",
   "remap_json": "outputs/capsules/capsule_module_remap.json",
-  "run_root": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17",
+  "run_root": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23",
   "epochs": 5,
   "batch_size": 2,
   "grad_accum": 8,
@@ -105,28 +105,28 @@ Fri May 15 18:30:18 2026
   "no_4bit": false,
   "skip_module_e": false,
   "run_eval": false,
-  "module_e_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e",
-  "module7_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7",
-  "module8_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module8",
+  "module_e_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e",
+  "module7_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7",
+  "module8_dir": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module8",
   "visible_cuda_devices": "0",
-  "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e/interactions.jsonl",
-  "adapter_path": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7/cfg_c_tau2p5_k2p5_seed17_20260515_202239",
-  "module7_last_adapter_json": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module7/last_adapter_path.json",
+  "interactions_log": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module_e/interactions.jsonl",
+  "adapter_path": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7/cfg_c_tau2p5_k2p5_seed23_20260515_201406",
+  "module7_last_adapter_json": "outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7/last_adapter_path.json",
   "eval_dir": null
 }
-[DONE] config=cfg_c_tau2p5_k2p5 seed=17
+[DONE] config=cfg_c_tau2p5_k2p5 seed=23
 
 ============================= JOB FEEDBACK =============================
 
-NodeName=uc2n910
-Job ID: 4714660
+NodeName=uc3n072
+Job ID: 4714661
 Cluster: uc3
 User/Group: hd_ur228/hd_hd
 State: COMPLETED (exit code 0)
 Nodes: 1
 Cores per node: 8
-CPU Utilized: 01:56:42
-CPU Efficiency: 12.93% of 15:02:32 core-walltime
-Job Wall-clock time: 01:52:49
-Memory Utilized: 9.18 GB
-Memory Efficiency: 7.37% of 124.51 GB (124.51 GB/node)
+CPU Utilized: 01:21:16
+CPU Efficiency: 12.78% of 10:35:44 core-walltime
+Job Wall-clock time: 01:19:28
+Memory Utilized: 9.26 GB
+Memory Efficiency: 4.91% of 188.77 GB (188.77 GB/node)

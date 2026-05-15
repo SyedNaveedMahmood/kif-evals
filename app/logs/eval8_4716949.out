@@ -1,0 +1,125 @@
+[INFO] Job ID: 4716949
+[INFO] Node: uc3n082.localdomain
+[INFO] Config: cfg_c_tau2p5_k2p5
+[INFO] Seed: 23
+[INFO] Run root: outputs/sweeps/cfg_c_tau2p5_k2p5/seed23
+[INFO] Adapter JSON: outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7/last_adapter_path.json
+[INFO] Module 8 output: outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module8
+[INFO] CUDA_VISIBLE_DEVICES=0
+Fri May 15 20:50:15 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100                    On  |   00000000:26:00.0 Off |                    0 |
+| N/A   45C    P0             70W /  415W |      27MiB /  95830MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            3474      G   /usr/libexec/Xorg                        17MiB |
++-----------------------------------------------------------------------------------------+
+[INFO] Running Module 8
+[INFO] model_dir      = outputs/model
+[INFO] adapter_path   = outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module7/cfg_c_tau2p5_k2p5_seed23_20260515_201406
+[INFO] capsules_dir   = outputs/capsules
+[INFO] prompts_jsonl   = outputs/datasets/prompts.jsonl
+[INFO] out_dir        = outputs/sweeps/cfg_c_tau2p5_k2p5/seed23/module8
+{
+  "benign_pre": {
+    "loss": 5.397169907887776,
+    "ppl": 220.78070148487208
+  },
+  "post_lora": {
+    "loss": 5.364081223805745,
+    "ppl": 213.59489859224848,
+    "delta": {
+      "loss": -0.03308868408203125,
+      "ppl": -7.185802892623599
+    }
+  },
+  "robustness_post_lora": {
+    "avg_subject_mention_rate": 0.0,
+    "avg_keyword_hit_rate": 0.0
+  },
+  "extraction_likelihood": {
+    "EL10_pre": 1.2142335375150045e-05,
+    "EL10_post": 0.00018466835220654805,
+    "EL10_delta": 0.000172526016831398,
+    "EL10_ratio": 15.208635447879487,
+    "per_subject_pre": {
+      "Ariana Grande": 8.198743065198263e-06,
+      "Arijit Singh": 1.3901541630427043e-06,
+      "Beyonc\u00e9": 3.3161292473475137e-06,
+      "Drake (musician)": 4.320405423641205e-05,
+      "Ed Sheeran": 4.602596163749695e-06
+    },
+    "per_subject_post": {
+      "Ariana Grande": 7.872842252254486e-05,
+      "Arijit Singh": 0.00047520361840724945,
+      "Beyonc\u00e9": 0.00011239573359489441,
+      "Drake (musician)": 0.0001353863626718521,
+      "Ed Sheeran": 0.00012162762383619945
+    }
+  },
+  "signature_separation": {
+    "avg_cohens_d_pre": 0.8186184308753065,
+    "avg_cohens_d_post": 0.4701919735836375,
+    "delta": -0.348426457291669,
+    "per_subject_pre": {
+      "Ariana Grande": 0.7373692561024352,
+      "Arijit Singh": 1.060369393107093,
+      "Beyonc\u00e9": 0.8602983915009303,
+      "Drake (musician)": 0.32318199454371926,
+      "Ed Sheeran": 1.111873119122355
+    },
+    "per_subject_post": {
+      "Ariana Grande": 0.5294549397395035,
+      "Arijit Singh": 0.46602172849316115,
+      "Beyonc\u00e9": 0.6355455186662518,
+      "Drake (musician)": 0.0013403826816395926,
+      "Ed Sheeran": 0.7185972983376315
+    }
+  },
+  "similarity": {
+    "pre_to_post_lora": 0.031334634870290756
+  },
+  "subjects_eval": [
+    "Ariana Grande",
+    "Arijit Singh",
+    "Beyonc\u00e9",
+    "Drake (musician)",
+    "Ed Sheeran"
+  ],
+  "heldout_eval": [
+    "Eminem",
+    "Kanye West",
+    "Katy Perry",
+    "Michael Jackson",
+    "Queen (band)"
+  ]
+}
+[DONE] Module 8 complete
+[DONE] config=cfg_c_tau2p5_k2p5 seed=23
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc3n082
+Job ID: 4716949
+Cluster: uc3
+User/Group: hd_ur228/hd_hd
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 4
+CPU Utilized: 00:07:46
+CPU Efficiency: 18.17% of 00:42:44 core-walltime
+Job Wall-clock time: 00:10:41
+Memory Utilized: 29.38 GB
+Memory Efficiency: 15.56% of 188.77 GB (188.77 GB/node)
