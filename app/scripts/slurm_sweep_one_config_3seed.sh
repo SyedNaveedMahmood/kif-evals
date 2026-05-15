@@ -2,7 +2,7 @@
 #SBATCH --job-name=run
 #SBATCH --partition=gpu_h100,gpu_a100_il,gpu_h100_il
 #SBATCH --gres=gpu:3
-#SBATCH --cpus-per-gpu=24
+#SBATCH --cpus-per-gpu=4
 #SBATCH --nodes=1
 #SBATCH --time=12:00:00
 #SBATCH --output=logs/%x_%j.out
