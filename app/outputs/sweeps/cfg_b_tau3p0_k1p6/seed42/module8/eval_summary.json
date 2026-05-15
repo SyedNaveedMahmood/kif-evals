@@ -1,0 +1,74 @@
+{
+  "benign_pre": {
+    "loss": 5.397169907887776,
+    "ppl": 220.78070148487208
+  },
+  "post_lora": {
+    "loss": 5.373745282491048,
+    "ppl": 215.66909867967655,
+    "delta": {
+      "loss": -0.023424625396728516,
+      "ppl": -5.111602805195531
+    }
+  },
+  "robustness_post_lora": {
+    "avg_subject_mention_rate": 0.03333333333333333,
+    "avg_keyword_hit_rate": 0.003125
+  },
+  "extraction_likelihood": {
+    "EL10_pre": 1.2142335375150045e-05,
+    "EL10_post": 5.303906897703806e-05,
+    "EL10_delta": 4.0896733601888014e-05,
+    "EL10_ratio": 4.368111021343178,
+    "per_subject_pre": {
+      "Ariana Grande": 8.198743065198263e-06,
+      "Arijit Singh": 1.3901541630427043e-06,
+      "Beyoncé": 3.3161292473475137e-06,
+      "Drake (musician)": 4.320405423641205e-05,
+      "Ed Sheeran": 4.602596163749695e-06
+    },
+    "per_subject_post": {
+      "Ariana Grande": 1.7292176683743794e-05,
+      "Arijit Singh": 1.5286107858022053e-06,
+      "Beyoncé": 0.00016091453532377878,
+      "Drake (musician)": 1.5249475836753845e-05,
+      "Ed Sheeran": 7.02105462551117e-05
+    }
+  },
+  "signature_separation": {
+    "avg_cohens_d_pre": 0.8186184308753065,
+    "avg_cohens_d_post": 0.6722789791869068,
+    "delta": -0.14633945168839968,
+    "per_subject_pre": {
+      "Ariana Grande": 0.7373692561024352,
+      "Arijit Singh": 1.060369393107093,
+      "Beyoncé": 0.8602983915009303,
+      "Drake (musician)": 0.32318199454371926,
+      "Ed Sheeran": 1.111873119122355
+    },
+    "per_subject_post": {
+      "Ariana Grande": 0.6669877629080596,
+      "Arijit Singh": 0.5715422947912066,
+      "Beyoncé": 0.9107238855735744,
+      "Drake (musician)": 0.31457903847859303,
+      "Ed Sheeran": 0.8975619141831007
+    }
+  },
+  "similarity": {
+    "pre_to_post_lora": 0.030729295685887337
+  },
+  "subjects_eval": [
+    "Ariana Grande",
+    "Arijit Singh",
+    "Beyoncé",
+    "Drake (musician)",
+    "Ed Sheeran"
+  ],
+  "heldout_eval": [
+    "Eminem",
+    "Kanye West",
+    "Katy Perry",
+    "Michael Jackson",
+    "Queen (band)"
+  ]
+}

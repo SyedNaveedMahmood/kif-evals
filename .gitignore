@@ -78,3 +78,13 @@ activation_report.json
 !**/logs/**/*.out
 !**/logs/**/*.err
 !**/logs/**/*.log
+
+
+# Keep app/outputs ignored by default, except Module 8 eval summaries
+/app/outputs/**
+!/app/outputs/
+!/app/outputs/sweeps/
+!/app/outputs/sweeps/*/
+!/app/outputs/sweeps/*/seed*/
+!/app/outputs/sweeps/*/seed*/module8/
+!/app/outputs/sweeps/*/seed*/module8/eval_summary.json

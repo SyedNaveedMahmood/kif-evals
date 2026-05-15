@@ -1,0 +1,28 @@
+[INFO] Job ID: 4714660
+[INFO] Node: uc2n910.localdomain
+[INFO] Commit: 0873b502ab0d24443b6f4152dc2d3977a6dd7c20
+[INFO] Config: cfg_c_tau2p5_k2p5
+[INFO] tau=2.5 k=2.5 seed=17
+[INFO] CUDA_VISIBLE_DEVICES=0
+[INFO] Run root: outputs/sweeps/cfg_c_tau2p5_k2p5/seed17
+Fri May 15 18:30:18 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100 80GB PCIe          On  |   00000000:19:00.0 Off |                    0 |
+| N/A   41C    P0             52W /  300W |      23MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            2553      G   /usr/libexec/Xorg                        17MiB |
++-----------------------------------------------------------------------------------------+
+[CMD] /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/scripts/run_module_e_one.py --model_dir outputs/model --capsules_dir outputs/capsules --dataset_dir outputs/datasets --out_dir outputs/sweeps/cfg_c_tau2p5_k2p5/seed17/module_e --seed 17 --z_tau 2.5 --soft_gate_k 2.5 --harvest_variants_per_subject 50 --remap_json outputs/capsules/capsule_module_remap.json

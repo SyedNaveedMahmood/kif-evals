@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=eval8
-#SBATCH --partition=gpu_a100_il,gpu_h100,gpu_h100_il
+#SBATCH --partition=gpu_a100_il,gpu_h100,gpu_h100_il,dev_gpu_h100,dev_gpu_a100_il
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --nodes=1
-#SBATCH --time=04:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
