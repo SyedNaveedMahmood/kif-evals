@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=run
-#SBATCH --partition=gpu_h100
+#SBATCH --partition=gpu_h100,gpu_a100_il,gpu_h100_il
 #SBATCH --gres=gpu:3
 #SBATCH --cpus-per-gpu=24
 #SBATCH --nodes=1
