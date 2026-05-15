@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=kif_m8_eval
+#SBATCH --job-name=eval8
 #SBATCH --partition=gpu_a100_il,gpu_h100,gpu_h100_il
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
