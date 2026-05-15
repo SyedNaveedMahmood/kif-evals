@@ -71,3 +71,10 @@ activation_report.json
 **/global_adapters/
 **/plots/
 **/visualizations/
+
+# Keep Slurm/run logs for any experiment folder
+!**/logs/
+!**/logs/**/
+!**/logs/**/*.out
+!**/logs/**/*.err
+!**/logs/**/*.log
