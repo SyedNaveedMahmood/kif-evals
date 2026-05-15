@@ -1,0 +1,48 @@
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2026-05-14 20:48:50,974 - root - WARNING - [module_a.py:41] - Extra NLP packages not available. Some advanced features will be disabled.
+2026-05-14 20:48:51,533 - KIF-Module0 - INFO - [module0.py:288] - ==================================================
+2026-05-14 20:48:51,533 - KIF-Module0 - INFO - [module0.py:289] - Starting KIF Module 0: Model Setup & Quantization
+2026-05-14 20:48:51,533 - KIF-Module0 - INFO - [module0.py:290] - ==================================================
+2026-05-14 20:48:51,534 - KIF-Module0 - INFO - [module0.py:95] - Verifying environment...
+2026-05-14 20:48:51,631 - KIF-Module0 - INFO - [module0.py:103] - GPU: NVIDIA A100 80GB PCIe with 79.25 GB memory
+2026-05-14 20:48:51,638 - KIF-Module0 - INFO - [module0.py:115] - Environment verification complete
+2026-05-14 20:48:51,638 - KIF-Module0 - INFO - [module0.py:147] - Loading tokenizer from meta-llama/Llama-3.1-8B
+2026-05-14 20:48:56,107 - KIF-Module0 - INFO - [module0.py:153] - Set pad_token to eos_token
+2026-05-14 20:49:08,185 - KIF-Module0 - WARNING - [module0.py:125] - Using bitsandbytes 0.49.2 - version 0.43.x is recommended for stability
+2026-05-14 20:49:08,187 - KIF-Module0 - INFO - [module0.py:127] - Configuring 4-bit quantization (nf4)
+2026-05-14 20:49:08,189 - KIF-Module0 - INFO - [module0.py:162] - GPU memory usage before model loading: 0.00%
+2026-05-14 20:49:08,189 - KIF-Module0 - INFO - [module0.py:164] - Loading and quantizing model from meta-llama/Llama-3.1-8B
+`torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [02:02<06:08, 122.89s/it]Fetching 4 files: 100%|██████████| 4/4 [02:02<00:00, 30.72s/it] 
+2026-05-14 20:51:18,636 - accelerate.utils.modeling - INFO - [modeling.py:987] - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:213: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Loading checkpoint shards:  25%|██▌       | 1/4 [00:11<00:34, 11.63s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:15<00:13,  6.89s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:18<00:05,  5.21s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:18<00:00,  3.33s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:18<00:00,  4.71s/it]
+2026-05-14 20:51:38,321 - KIF-Module0 - INFO - [module0.py:176] - GPU memory usage after model loading: 75.98%
+2026-05-14 20:51:38,321 - KIF-Module0 - INFO - [module0.py:194] - Saving model to outputs/model
+2026-05-14 20:51:48,217 - KIF-Module0 - WARNING - [module0.py:208] - Expected model file outputs/model/model.safetensors not found
+2026-05-14 20:51:48,220 - KIF-Module0 - INFO - [module0.py:210] - ✅ Model and tokenizer saved to outputs/model
+2026-05-14 20:51:48,220 - KIF-Module0 - INFO - [module0.py:223] - Running test inference for verification...
+The following generation flags are not valid and may be ignored: ['temperature', 'top_p']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:468: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+2026-05-14 20:52:00,794 - KIF-Module0 - INFO - [module0.py:245] - ✅ Warm-up successful, output: Hello, world! I’m a new blogger and I’m excited to
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:269] - GPU memory allocated: 5.32 GB
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:270] - GPU memory reserved: 12.54 GB
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:277] - CPU memory (RSS): 4.36 GB
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:312] - ==================================================
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:313] - Module 0 completed successfully
+2026-05-14 20:52:00,798 - KIF-Module0 - INFO - [module0.py:314] - ==================================================
+2026-05-14 20:52:00,886 - KIF-ModuleB - INFO - [module_b.py:267] - Loaded 5733 prompts across 589 triples
+The tokenizer you are loading from 'outputs/model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+2026-05-14 20:52:01,301 - KIF-ModuleB - INFO - [module_b.py:274] - Loading model from: outputs/model
+2026-05-14 20:52:01,429 - accelerate.utils.modeling - INFO - [modeling.py:987] - We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:04<00:04,  4.80s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.19s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.58s/it]
+2026-05-14 20:52:06,668 - KIF-ModuleB - INFO - [module_b.py:289] - Model loaded on device: cuda:0; CUDA device count: 1
+2026-05-14 20:52:06,669 - KIF-ModuleB - INFO - [module_b.py:156] - Target modules: 160 across 32 layers
+2026-05-14 20:52:06,670 - KIF-ModuleB - INFO - [module_b.py:175] - Registered 160 forward hooks
+2026-05-14 20:52:06,670 - KIF-ModuleB - INFO - [module_b.py:377] - ================================================================
+2026-05-14 20:52:06,670 - KIF-ModuleB - INFO - [module_b.py:378] - Starting Module B: Hooks-in-Parallel + Batching
+2026-05-14 20:52:06,670 - KIF-ModuleB - INFO - [module_b.py:379] - ================================================================
+Collecting activations:   0%|          | 0/180 [00:00<?, ?it/s]Collecting activations:   1%|          | 1/180 [05:27<16:17:25, 327.63s/it]Collecting activations:   1%|          | 2/180 [10:24<15:17:33, 309.29s/it]Collecting activations:   2%|▏         | 3/180 [14:39<14:00:28, 284.91s/it]Collecting activations:   2%|▏         | 4/180 [18:05<12:23:31, 253.47s/it]Collecting activations:   3%|▎         | 5/180 [25:05<15:15:05, 313.75s/it]Collecting activations:   3%|▎         | 6/180 [29:25<14:16:37, 295.39s/it][2026-05-14T21:23:43.902] error: *** JOB 4702203 ON uc2n909 CANCELLED AT 2026-05-14T21:23:43 DUE to SIGNAL Terminated ***
