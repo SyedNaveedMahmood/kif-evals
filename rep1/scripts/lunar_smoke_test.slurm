@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lunar-smoke
-#SBATCH --partition=dev_gpu_a100_il
+#SBATCH --partition=dev_gpu_a100_il,dev_gpu_h100,gpu_a100_short,gpu_h100_short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -8,35 +8,42 @@
 #SBATCH --mem=80G
 #SBATCH --time=00:30:00
 #SBATCH --chdir=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/rep1
-#SBATCH --output=slurm-%x-%j.out
+#SBATCH --output=/pfs/work9/workspace/scratch/hd_ur228-llmrun/lunar-smoke-%j.log
+#SBATCH --error=/pfs/work9/workspace/scratch/hd_ur228-llmrun/lunar-smoke-%j.log
 
 set -euo pipefail
 
-REPO_ROOT="/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/rep1"
-ENV_PREFIX="${ENV_PREFIX:-$REPO_ROOT/.conda/envs/lunar-kif-llama31}"
+export WORKDIR="${WORKDIR:-/pfs/work9/workspace/scratch/hd_ur228-llmrun}"
+export REPO_ROOT="${REPO_ROOT:-$WORKDIR/src/rep1}"
+
+source "$WORKDIR/setup_lunar_env.sh"
 
 cd "$REPO_ROOT"
 
-module purge
-module load devel/miniforge
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate "$ENV_PREFIX"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-${SLURM_CPUS_PER_GPU:-16}}"
+export MKL_NUM_THREADS="$OMP_NUM_THREADS"
+export NUMEXPR_NUM_THREADS="$OMP_NUM_THREADS"
 
-export HF_HOME="${HF_HOME:-$REPO_ROOT/.hf_cache}"
-export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
-export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
-export TORCH_HOME="${TORCH_HOME:-$REPO_ROOT/.torch_cache}"
-export TOKENIZERS_PARALLELISM=false
-export PYTHONNOUSERSITE=1
+echo "Job ID: ${SLURM_JOB_ID:-none}"
+echo "Repo: $REPO_ROOT"
+echo "Commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
+echo "Env: $ENV_PREFIX"
+echo "HF_HOME: $HF_HOME"
 
 nvidia-smi
+
 python - <<'PY'
-import os, torch
-print('cwd:', os.getcwd())
-print('cuda available:', torch.cuda.is_available())
-print('device count:', torch.cuda.device_count())
+import os
+import torch
+
+print("cwd:", os.getcwd())
+print("torch:", torch.__version__)
+print("cuda:", torch.version.cuda)
+print("cuda available:", torch.cuda.is_available())
+print("device count:", torch.cuda.device_count())
+
 if torch.cuda.is_available():
-    print('gpu:', torch.cuda.get_device_name(0))
+    print("gpu:", torch.cuda.get_device_name(0))
 PY
 
 python scripts/run_lunar_on_kif_then_eval.py --help
