@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import torch
+from torch.utils.data import DataLoader
 
 import methods.reglu as reglu
 
@@ -22,6 +23,67 @@ logger = logging.getLogger(__name__)
 # Explicit model-family aliases for base Llama-3.1-8B. Both use no chat template.
 reglu._CHAT_TEMPLATES["llama3.1-8b"] = "{instruction}"
 reglu._CHAT_TEMPLATES["llama3-8b"] = "{instruction}"
+
+
+def _collect_representations_sum_pool(
+    model,
+    tokenizer,
+    rows: List[Dict[str, str]],
+    model_family: str,
+    max_length: int,
+    batch_size: int,
+    target_modules: Dict[str, torch.nn.Module],
+    device: torch.device,
+    desc: str,
+) -> Dict[str, torch.Tensor]:
+    """Collect target-module output representations using upstream ReGLU pooling.
+
+    Upstream ReGLU sums token-level layer outputs along the sequence dimension
+    before covariance estimation. This patch preserves that behavior instead of
+    mean pooling.
+    """
+    buffers: Dict[str, List[torch.Tensor]] = {name: [] for name in target_modules}
+
+    def make_hook(key: str):
+        def _hook(_mod, _inp, out):
+            out_t = out[0] if isinstance(out, (tuple, list)) else out
+            if out_t is None:
+                return
+            if out_t.dim() == 3:
+                pooled = out_t.detach().float().sum(dim=1).cpu()
+            elif out_t.dim() == 2:
+                pooled = out_t.detach().float().cpu()
+            else:
+                return
+            buffers[key].append(pooled)
+        return _hook
+
+    handles = [module.base_layer.register_forward_hook(make_hook(name)) for name, module in target_modules.items()]
+    was_training = model.training
+    model.eval()
+    dataset = reglu._QADataset(rows, tokenizer, model_family, max_length)
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=lambda b: reglu._collate(b, tokenizer.pad_token_id),
+    )
+    logger.info(
+        "[ReGLU] Collecting representations for %s: %d examples, %d LoRA modules, pooling=sum",
+        desc, len(rows), len(target_modules),
+    )
+    try:
+        with torch.no_grad():
+            for batch in loader:
+                batch = reglu._batch_to_device(batch, device)
+                model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+    finally:
+        for handle in handles:
+            handle.remove()
+        if was_training:
+            model.train()
+
+    return {name: torch.cat(chunks, dim=0) for name, chunks in buffers.items() if chunks}
 
 
 def _apply_rila_initialization_no_w_cache(
@@ -38,11 +100,11 @@ def _apply_rila_initialization_no_w_cache(
     forget_sample = reglu._repeat_to_len(forget_rows, n)
     retain_sample = reglu._repeat_to_len(retain_rows, n)
 
-    h_forget = reglu._collect_representations_for_modules(
+    h_forget = _collect_representations_sum_pool(
         model, tokenizer, forget_sample, cfg.model_family, cfg.max_length,
         cfg.batch_size, target_modules, device, "forget/RILA"
     )
-    h_retain = reglu._collect_representations_for_modules(
+    h_retain = _collect_representations_sum_pool(
         model, tokenizer, retain_sample, cfg.model_family, cfg.max_length,
         cfg.batch_size, target_modules, device, "retain/RILA"
     )
@@ -51,7 +113,6 @@ def _apply_rila_initialization_no_w_cache(
     cache_layers: Dict[str, Dict[str, torch.Tensor]] = {}
     rank = int(cfg.lora_r)
     beta = float(cfg.rila_beta)
-    eps = float(cfg.rila_cov_shrink)
 
     for name, module in target_modules.items():
         if name not in h_forget or name not in h_retain:
@@ -60,10 +121,11 @@ def _apply_rila_initialization_no_w_cache(
 
         hf = h_forget[name].double()
         hr = h_retain[name].double()
-        if eps > 0:
-            hf = hf + eps * torch.randn_like(hf)
-            hr = hr + eps * torch.randn_like(hr)
 
+        # Upstream adds eps * I to both covariance matrices before
+        # Cov_delta=(1-beta)CovF-beta CovR. The identity term only shifts
+        # eigenvalues, not eigenvectors, so the low-rank eigensolver below
+        # intentionally omits explicit shrinkage while preserving eigenspaces.
         q_delta, top_evals = reglu._top_eigenvectors_signed_low_rank(hf, hr, rank, beta)
         q_retain = reglu._retain_basis(hr, int(cfg.rol_rank)).detach().cpu().float()
 
@@ -118,5 +180,6 @@ def _reglu_init_with_merged_default(self, config_overrides=None):
 
 
 # Monkey-patch the implementation used by ReGLUMethod.run().
+reglu._collect_representations_for_modules = _collect_representations_sum_pool
 reglu._apply_rila_initialization = _apply_rila_initialization_no_w_cache
 reglu.ReGLUMethod.__init__ = _reglu_init_with_merged_default
