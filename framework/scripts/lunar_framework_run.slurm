@@ -88,11 +88,11 @@ SUBJECTS=(
 
 CONFIG_JSON="${CONFIG_JSON:-$(cat <<'JSON'
 {
-  "model_family": "plain",
-  "auto_select_layer": false,
-  "layer_modified": 22,
+  "model_family": "llama3-8b",
+  "auto_select_layer": true,
   "use_closed_form": true,
-  "lambda_reg": 0.001,
+  "lambda_reg": 1.0,
+  "uv_target_norm": 1.0,
   "n_forget": 132,
   "n_retain": 128,
   "n_ref": 64,
