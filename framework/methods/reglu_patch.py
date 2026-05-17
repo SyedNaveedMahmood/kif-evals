@@ -19,6 +19,10 @@ import methods.reglu as reglu
 
 logger = logging.getLogger(__name__)
 
+# Explicit model-family aliases for base Llama-3.1-8B. Both use no chat template.
+reglu._CHAT_TEMPLATES["llama3.1-8b"] = "{instruction}"
+reglu._CHAT_TEMPLATES["llama3-8b"] = "{instruction}"
+
 
 def _apply_rila_initialization_no_w_cache(
     model,
@@ -107,6 +111,8 @@ _original_reglu_init = reglu.ReGLUMethod.__init__
 
 def _reglu_init_with_merged_default(self, config_overrides=None):
     _original_reglu_init(self, config_overrides=config_overrides)
+    if not config_overrides or "model_family" not in config_overrides:
+        self.cfg.model_family = "llama3.1-8b"
     if not config_overrides or "save_merged_model" not in config_overrides:
         self.cfg.save_merged_model = True
 
