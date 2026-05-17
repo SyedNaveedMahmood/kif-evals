@@ -87,7 +87,7 @@ SUBJECTS=(
 
 CONFIG_JSON="${CONFIG_JSON:-$(cat <<'JSON'
 {
-  "model_family": "llama3-8b",
+  "model_family": "llama3.1-8b",
   "variant": "ihl",
   "lora_targets": "all",
   "lora_r": 32,
