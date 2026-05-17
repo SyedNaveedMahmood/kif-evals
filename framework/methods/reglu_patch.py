@@ -102,5 +102,15 @@ def _apply_rila_initialization_no_w_cache(
     return rol_bases
 
 
+_original_reglu_init = reglu.ReGLUMethod.__init__
+
+
+def _reglu_init_with_merged_default(self, config_overrides=None):
+    _original_reglu_init(self, config_overrides=config_overrides)
+    if not config_overrides or "save_merged_model" not in config_overrides:
+        self.cfg.save_merged_model = True
+
+
 # Monkey-patch the implementation used by ReGLUMethod.run().
 reglu._apply_rila_initialization = _apply_rila_initialization_no_w_cache
+reglu.ReGLUMethod.__init__ = _reglu_init_with_merged_default
