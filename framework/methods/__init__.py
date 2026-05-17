@@ -5,6 +5,8 @@ decorate with @METHOD_REGISTRY.register("name"), then add the import below.
 """
 
 from methods.lunar import LUNARMethod       # noqa: F401
+from methods.reglu import ReGLUMethod       # noqa: F401
+from methods import reglu_patch             # noqa: F401  applies runtime-safe ReGLU patch
 
 # Future methods — add imports here when ready:
 # from methods.rmu   import RMUMethod        # noqa: F401
@@ -14,4 +16,4 @@ from methods.lunar import LUNARMethod       # noqa: F401
 
 from methods.base import METHOD_REGISTRY    # re-export
 
-__all__ = ["METHOD_REGISTRY", "LUNARMethod"]
+__all__ = ["METHOD_REGISTRY", "LUNARMethod", "ReGLUMethod"]
