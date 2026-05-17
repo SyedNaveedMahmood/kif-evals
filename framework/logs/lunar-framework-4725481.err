@@ -1,0 +1,41 @@
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+GpuFreq=control_disabled
+2026-05-17 06:20:58,531  INFO      methods.base — [Registry] Registered: 'lunar'
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2026-05-17 06:21:10,782  INFO      methods.base — [lunar] Starting  →  /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4725481/lunar
+2026-05-17 06:21:10,866  INFO      methods.lunar — [LUNAR] Forget subjects (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+2026-05-17 06:21:10,896  INFO      methods.lunar — [LUNAR] Path B — all subjects are forget targets. No retain subjects in prompts.jsonl. Using UNVERIFIABLE_PROMPTS as retain set and Dref (LUNAR §6.2 unverifiable-prompts strategy).
+2026-05-17 06:21:10,896  INFO      methods.lunar — [LUNAR] Forget: 132  Retain: 128  Dref: 64  Source: unverifiable_prompts_fallback
+2026-05-17 06:21:10,896  INFO      methods.lunar — [LUNAR] Loading model from /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/outputs/model
+The tokenizer you are loading from '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/outputs/model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+`torch_dtype` is deprecated! Use `dtype` instead!
+2026-05-17 06:21:28,364  INFO      accelerate.utils.modeling — We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:04<00:04,  4.50s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.24s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:05<00:00,  2.58s/it]
+2026-05-17 06:21:49,452  INFO      methods.lunar — [LUNAR] UV at layer 22: norm=6.8526
+2026-05-17 06:21:49,452  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (forget)...
+2026-05-17 06:21:51,814  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (retain)...
+2026-05-17 06:21:54,013  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (forget)...
+2026-05-17 06:21:56,269  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (retain)...
+2026-05-17 06:21:58,496  INFO      methods.lunar — [LUNAR] Closed-form solve: H=[6664, 14336]  A=[6664, 4096]  λ=0.001
+2026-05-17 06:22:20,559  INFO      methods.lunar — [LUNAR] Solved Wc: shape=[14336, 4096]  norm=383.0466
+Traceback (most recent call last):
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 234, in <module>
+    main()
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 215, in main
+    summary = run_pipeline(
+              ^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 80, in run_pipeline
+    result: UnlearningResult = method.execute(
+                               ^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/methods/base.py", line 152, in execute
+    result = self.run(
+             ^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/methods/lunar.py", line 608, in run
+    updated_model.model.layers[layer_idx].mlp.down_proj.weight.copy_(
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/nn/modules.py", line 401, in __torch_function__
+    return super().__torch_function__(func, types, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: The size of tensor a (29360128) must match the size of tensor b (4096) at non-singleton dimension 0
+srun: error: uc2n911: task 0: Exited with exit code 1

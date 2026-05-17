@@ -1,0 +1,36 @@
+GpuFreq=control_disabled
+2026-05-17 17:27:43,829  INFO      methods.base — [Registry] Registered: 'lunar'
+2026-05-17 17:27:54,885  INFO      methods.base — [lunar] Starting  →  /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar
+2026-05-17 17:27:54,938  INFO      methods.lunar — [LUNAR] Forget subjects (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+2026-05-17 17:27:54,969  INFO      methods.lunar — [LUNAR] Path B — all subjects are forget targets. No retain subjects in prompts.jsonl. Using UNVERIFIABLE_PROMPTS as retain set and Dref (LUNAR §6.2 unverifiable-prompts strategy).
+2026-05-17 17:27:54,969  INFO      methods.lunar — [LUNAR] Forget: 132  Retain: 128  Dref: 64  Source: unverifiable_prompts_fallback
+2026-05-17 17:27:54,969  INFO      methods.lunar — [LUNAR] Loading model from meta-llama/Llama-3.1-8B
+`torch_dtype` is deprecated! Use `dtype` instead!
+2026-05-17 17:28:00,089  INFO      accelerate.utils.modeling — We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:02<00:08,  2.81s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:05<00:05,  2.91s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:08<00:02,  2.94s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:09<00:00,  2.12s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:09<00:00,  2.41s/it]
+2026-05-17 17:28:23,311  INFO      methods.lunar — [LUNAR] UV at layer 22: norm=11.5251
+2026-05-17 17:28:23,311  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (forget)...
+2026-05-17 17:28:24,713  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (retain)...
+2026-05-17 17:28:25,693  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (forget)...
+2026-05-17 17:28:26,689  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (retain)...
+2026-05-17 17:28:27,656  INFO      methods.lunar — [LUNAR] Closed-form solve: H=[4324, 14336]  A=[4324, 4096]  λ=0.001
+2026-05-17 17:28:47,240  INFO      methods.lunar — [LUNAR] Solved Wc: shape=[14336, 4096]  norm=557.6275
+2026-05-17 17:28:47,741  INFO      methods.lunar — [LUNAR] Patched down_proj at layer 22.
+2026-05-17 17:28:47,744  INFO      methods.lunar — [LUNAR] Saving merged model → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearned_model
+2026-05-17 17:29:05,908  INFO      methods.lunar — [LUNAR] Metadata saved → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/lunar_meta.json
+2026-05-17 17:29:05,958  INFO      methods.base — [Result] Saved manifest → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearning_result.json
+2026-05-17 17:29:05,959  INFO      methods.base — [lunar] Done.  Result → {'method_name': 'lunar', 'merged_model_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearned_model', 'model_dir': None, 'adapter_path': None, 'subjects': ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift'], 'output_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar', 'extra': {}}
+2026-05-17 17:29:05,959  INFO      orchestrate — [Pipeline] Unlearning complete: {'method_name': 'lunar', 'merged_model_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearned_model', 'model_dir': None, 'adapter_path': None, 'subjects': ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift'], 'output_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar', 'extra': {}}
+2026-05-17 17:29:05,967  INFO      M8-eval — [M8] Subjects from override (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+The tokenizer you are loading from '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearned_model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+2026-05-17 17:29:06,476  INFO      M8-eval — [M8] Loading PRE model from meta-llama/Llama-3.1-8B
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:213: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Loading checkpoint shards:  25%|██▌       | 1/4 [00:05<00:15,  5.21s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:08<00:08,  4.33s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:12<00:04,  4.02s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:13<00:00,  2.64s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:13<00:00,  3.27s/it]
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:468: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+2026-05-17 17:33:31,559  INFO      M8-eval — [M8] Loading POST model (merged) from /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/lunar/unlearned_model
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:03<00:11,  3.98s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:07<00:07,  3.94s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:11<00:03,  3.97s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:12<00:00,  2.59s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:12<00:00,  3.10s/it]
+2026-05-17 17:37:58,138  INFO      sentence_transformers.base.model — No device provided, using cuda:0
+2026-05-17 17:37:58,910  INFO      sentence_transformers.base.model — Loading SentenceTransformer model from sentence-transformers/all-MiniLM-L6-v2.
+2026-05-17 17:40:43,222  INFO      M8-eval — [M8] Evaluation complete. Artefacts → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730280/eval

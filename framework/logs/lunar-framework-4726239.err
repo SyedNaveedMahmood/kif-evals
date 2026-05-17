@@ -1,0 +1,95 @@
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+GpuFreq=control_disabled
+2026-05-17 16:31:20,356  INFO      methods.base — [Registry] Registered: 'lunar'
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+2026-05-17 16:31:25,929  INFO      methods.base — [lunar] Starting  →  /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4726239/lunar
+2026-05-17 16:31:25,996  INFO      methods.lunar — [LUNAR] Forget subjects (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+2026-05-17 16:31:26,021  INFO      methods.lunar — [LUNAR] Path B — all subjects are forget targets. No retain subjects in prompts.jsonl. Using UNVERIFIABLE_PROMPTS as retain set and Dref (LUNAR §6.2 unverifiable-prompts strategy).
+2026-05-17 16:31:26,021  INFO      methods.lunar — [LUNAR] Forget: 132  Retain: 128  Dref: 64  Source: unverifiable_prompts_fallback
+2026-05-17 16:31:26,021  INFO      methods.lunar — [LUNAR] Loading model from meta-llama/Llama-3.1-8B
+Traceback (most recent call last):
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/utils/_http.py", line 403, in hf_raise_for_status
+    response.raise_for_status()
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/requests/models.py", line 1168, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py", line 479, in cached_files
+    hf_hub_download(
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 1014, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 1121, in _hf_hub_download_to_cache_dir
+    _raise_on_head_call_error(head_call_error, force_download, local_files_only)
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 1662, in _raise_on_head_call_error
+    raise head_call_error
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 1550, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 1467, in get_hf_file_metadata
+    r = _request_wrapper(
+        ^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 283, in _request_wrapper
+    response = _request_wrapper(
+               ^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/file_download.py", line 307, in _request_wrapper
+    hf_raise_for_status(response)
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/huggingface_hub/utils/_http.py", line 420, in hf_raise_for_status
+    raise _format(GatedRepoError, message, response) from e
+huggingface_hub.errors.GatedRepoError: 401 Client Error. (Request ID: Root=1-6a09d13e-73988b0a1d6f39961541b8be;19c06bb1-6aa0-4332-8188-20c0fcb2c13a)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json.
+Access to model meta-llama/Llama-3.1-8B is restricted. You must have access to it and be authenticated to access it. Please log in.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 234, in <module>
+    main()
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 215, in main
+    summary = run_pipeline(
+              ^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py", line 80, in run_pipeline
+    result: UnlearningResult = method.execute(
+                               ^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/methods/base.py", line 152, in execute
+    result = self.run(
+             ^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/methods/lunar.py", line 530, in run
+    tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/models/auto/tokenization_auto.py", line 1109, in from_pretrained
+    config = AutoConfig.from_pretrained(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/models/auto/configuration_auto.py", line 1332, in from_pretrained
+    config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/configuration_utils.py", line 662, in get_config_dict
+    config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/configuration_utils.py", line 721, in _get_config_dict
+    resolved_config_file = cached_file(
+                           ^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py", line 322, in cached_file
+    file = cached_files(path_or_repo_id=path_or_repo_id, filenames=[filename], **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/transformers/utils/hub.py", line 543, in cached_files
+    raise OSError(
+OSError: You are trying to access a gated repo.
+Make sure to have access to it at https://huggingface.co/meta-llama/Llama-3.1-8B.
+401 Client Error. (Request ID: Root=1-6a09d13e-73988b0a1d6f39961541b8be;19c06bb1-6aa0-4332-8188-20c0fcb2c13a)
+
+Cannot access gated repo for url https://huggingface.co/meta-llama/Llama-3.1-8B/resolve/main/config.json.
+Access to model meta-llama/Llama-3.1-8B is restricted. You must have access to it and be authenticated to access it. Please log in.
+srun: error: uc3n075: task 0: Exited with exit code 1
