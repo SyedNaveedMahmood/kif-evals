@@ -1,0 +1,199 @@
+Job ID: 4730721
+LLMRUN_ROOT: /pfs/work9/workspace/scratch/hd_ur228-llmrun
+SRC_ROOT: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src
+FRAMEWORK_ROOT: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework
+KIF_APP_ROOT: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app
+PWD: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src
+Git commit: 42c490f627348421913e76a0f5faf51b96b49591
+Env activate: /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/activate
+Python: /pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/bin/python
+HF_HOME: /pfs/work9/workspace/scratch/hd_ur228-llmrun/data/hf
+HF_HUB_CACHE: /pfs/work9/workspace/scratch/hd_ur228-llmrun/data/hf
+MODEL_DIR: meta-llama/Llama-3.1-8B
+PROMPTS_JSONL: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/outputs/datasets/prompts.jsonl
+CAPSULES_DIR: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/empty_capsules
+OUTPUT_ROOT: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar
+RUN_OUTPUT_DIR: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721
+RUN_EVAL_DIR: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval
+LOGDIR: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/logs
+MAX_SUBJECTS: 11
+USE_4BIT: true
+CONFIG_JSON: {
+  "model_family": "llama3-8b",
+  "auto_select_layer": true,
+  "use_closed_form": true,
+  "lambda_reg": 1.0,
+  "uv_target_norm": 1.0,
+  "n_forget": 132,
+  "n_retain": 128,
+  "n_ref": 64,
+  "max_per_subject": 12,
+  "batch_size": 4,
+  "seed": 17
+}
+Subjects:
+  - Ariana Grande
+  - Arijit Singh
+  - Beyoncé
+  - Drake (musician)
+  - Ed Sheeran
+  - Eminem
+  - Kanye West
+  - Katy Perry
+  - Michael Jackson
+  - Queen (band)
+  - Taylor Swift
+Using Hugging Face model ID: meta-llama/Llama-3.1-8B
+Checking Python packages...
+[OK] torch: 2.11.0+cu128
+[OK] transformers: 4.57.6
+[OK] numpy: 2.4.4
+[OK] sklearn: 1.8.0
+[OK] sentence_transformers: 5.5.0
+[OK] huggingface_hub: 0.36.2
+Checking Hugging Face access...
+HF_HOME: /pfs/work9/workspace/scratch/hd_ur228-llmrun/data/hf
+HF_HUB_CACHE: /pfs/work9/workspace/scratch/hd_ur228-llmrun/data/hf
+whoami: {'type': 'user', 'id': '6867efa4238292773cedf981', 'name': 'mdsameersakib', 'fullname': 'Md. Sameer Sakib', 'email': 'md.sameer.sakib@g.bracu.ac.bd', 'emailVerified': True, 'canPay': False, 'billingMode': 'prepaid', 'periodEnd': 1780272000, 'isPro': False, 'avatarUrl': 'https://cdn-avatars.huggingface.co/v1/production/uploads/no-auth/rQQryY36idVm_7qa-cjbP.png', 'orgs': [], 'auth': {'type': 'access_token', 'accessToken': {'displayName': 'KIF', 'role': 'write', 'createdAt': '2025-09-20T19:49:40.455Z'}}}
+Checking gated model config/tokenizer: meta-llama/Llama-3.1-8B
+model_type: llama
+architectures: ['LlamaForCausalLM']
+tokenizer: PreTrainedTokenizerFast
+Checking CUDA...
+Sun May 17 18:36:12 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H100 PCIe               On  |   00000000:B6:00.0 Off |                    0 |
+| N/A   34C    P0             48W /  350W |      27MiB /  81559MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            2504      G   /usr/libexec/Xorg                        17MiB |
++-----------------------------------------------------------------------------------------+
+torch: 2.11.0+cu128
+cuda: 12.8
+cuda available: True
+cuda visible devices: 0
+gpu: NVIDIA H100 PCIe
+Running:
+ python -u /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/orchestrate.py --method lunar --model_dir meta-llama/Llama-3.1-8B --prompts_jsonl /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/app/outputs/datasets/prompts.jsonl --capsules_dir /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/empty_capsules --output_dir /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721 --eval_out_dir /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval --subjects Ariana\ Grande Arijit\ Singh Beyoncé Drake\ \(musician\) Ed\ Sheeran Eminem Kanye\ West Katy\ Perry Michael\ Jackson Queen\ \(band\) Taylor\ Swift --config $'{\n  "model_family": "llama3-8b",\n  "auto_select_layer": true,\n  "use_closed_form": true,\n  "lambda_reg": 1.0,\n  "uv_target_norm": 1.0,\n  "n_forget": 132,\n  "n_retain": 128,\n  "n_ref": 64,\n  "max_per_subject": 12,\n  "batch_size": 4,\n  "seed": 17\n}' --skip_eval false
+
+==============================================================
+  KIF Dual-Metric Evaluation Result
+==============================================================
+  SMR  (surface leakage)      : 60.61%
+  EL10 (latent trace, post)   : 0.0000
+  Utility drift (PPL Δ)       : +7.10
+  → Mechanism state           : Type III  (Instability — subject still leaks in surface text)
+==============================================================
+
+
+==============================================================
+FINAL SUMMARY
+==============================================================
+{
+  "benign_pre": {
+    "loss": 5.397958437601726,
+    "ppl": 220.95486228471816
+  },
+  "post_unlearned": {
+    "loss": 5.4295814037323,
+    "ppl": 228.05376298708097,
+    "delta": {
+      "loss": 0.03162296613057425,
+      "ppl": 7.098900702362812
+    }
+  },
+  "forgetting": {
+    "avg_subject_mention_rate": 0.6060606060606061,
+    "avg_keyword_hit_rate": 0.06960227272727272
+  },
+  "extraction_likelihood": {
+    "EL10_pre": 1.4442611824382435e-05,
+    "EL10_post": 1.6813646211768642e-05,
+    "EL10_delta": 2.3710343873862065e-06,
+    "EL10_ratio": 1.1641693632853414,
+    "per_subject_pre": {
+      "Ariana Grande": 8.140380183855692e-06,
+      "Arijit Singh": 7.086123029390971e-06,
+      "Beyonc\u00e9": 2.6114284992218018e-06,
+      "Drake (musician)": 4.6851734320322675e-06,
+      "Ed Sheeran": 7.167458534240723e-06,
+      "Eminem": 7.526949048042297e-06,
+      "Kanye West": 8.287529150644938e-06,
+      "Katy Perry": 5.72328766187032e-06,
+      "Michael Jackson": 4.55416738986969e-06,
+      "Queen (band)": 9.492412209510803e-05,
+      "Taylor Swift": 8.162111043930054e-06
+    },
+    "per_subject_post": {
+      "Ariana Grande": 2.4070963263511658e-05,
+      "Arijit Singh": 5.364418029785156e-06,
+      "Beyonc\u00e9": 2.3910154898961387e-06,
+      "Drake (musician)": 3.389393289883932e-05,
+      "Ed Sheeran": 5.501012007395427e-06,
+      "Eminem": 2.6974206169446308e-05,
+      "Kanye West": 8.205572764078775e-06,
+      "Katy Perry": 4.784514506657918e-06,
+      "Michael Jackson": 1.3859942555427551e-05,
+      "Queen (band)": 5.39291650056839e-05,
+      "Taylor Swift": 5.97536563873291e-06
+    }
+  },
+  "signature_separation": {
+    "available": false,
+    "note": "Signature separation / Cohen's d disabled for this evaluation."
+  },
+  "similarity": {
+    "pre_to_post": 0.5940556526184082
+  },
+  "subjects_eval": [
+    "Ariana Grande",
+    "Arijit Singh",
+    "Beyonc\u00e9",
+    "Drake (musician)",
+    "Ed Sheeran",
+    "Eminem",
+    "Kanye West",
+    "Katy Perry",
+    "Michael Jackson",
+    "Queen (band)",
+    "Taylor Swift"
+  ],
+  "subjects_heldout": [],
+  "method": "lunar"
+}
+Finished at Sun May 17 06:49:55 PM CEST 2026
+Outputs:
+  Run output: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721
+  Unlearned model: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model
+  Manifest: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearning_result.json
+  LUNAR metadata: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/lunar_meta.json
+  Eval output: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval
+  Eval summary: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval/eval_summary.json
+  Final summary: /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval/final_summary.json
+
+============================= JOB FEEDBACK =============================
+
+NodeName=uc2n915
+Job ID: 4730721
+Cluster: uc3
+User/Group: hd_ur228/hd_hd
+State: COMPLETED (exit code 0)
+Nodes: 1
+Cores per node: 16
+CPU Utilized: 00:00:28
+CPU Efficiency: 0.18% of 04:23:28 core-walltime
+Job Wall-clock time: 00:16:28
+Memory Utilized: 6.08 GB
+Memory Efficiency: 5.07% of 120.00 GB (120.00 GB/node)

@@ -1,0 +1,70 @@
+GpuFreq=control_disabled
+2026-05-17 18:36:18,415  INFO      methods.base — [Registry] Registered: 'lunar'
+2026-05-17 18:36:30,465  INFO      methods.base — [lunar] Starting  →  /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar
+2026-05-17 18:36:30,527  INFO      methods.lunar — [LUNAR] Forget subjects (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+2026-05-17 18:36:30,557  INFO      methods.lunar — [LUNAR] Path B — all subjects are forget targets. No retain subjects in prompts.jsonl. Using UNVERIFIABLE_PROMPTS as retain set and Dref (LUNAR §6.2 unverifiable-prompts strategy).
+2026-05-17 18:36:30,557  INFO      methods.lunar — [LUNAR] Forget: 132  Retain: 128  Dref: 64  Source: unverifiable_prompts_fallback
+2026-05-17 18:36:30,557  INFO      methods.lunar — [LUNAR] Loading model from meta-llama/Llama-3.1-8B
+`torch_dtype` is deprecated! Use `dtype` instead!
+2026-05-17 18:36:34,195  INFO      accelerate.utils.modeling — We will use 90% of the memory on device 0 for storing the model, and 10% for the buffer to avoid OOM. You can set `max_memory` in to a higher value to use more memory (at your own risk).
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:02<00:08,  2.83s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:05<00:05,  2.68s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:08<00:02,  2.71s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:08<00:00,  1.90s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:08<00:00,  2.20s/it]
+2026-05-17 18:36:43,415  INFO      methods.lunar — [LUNAR] Layer selection over 16 candidates: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+2026-05-17 18:37:13,390  INFO      methods.lunar — [LUNAR] UV at layer 8: norm=3.1402
+2026-05-17 18:37:16,080  INFO      methods.lunar — [LUNAR] Layer  8  s1=0.0374  s2=0.0260  score=0.0114
+2026-05-17 18:37:16,556  INFO      methods.lunar — [LUNAR] UV at layer 9: norm=3.5688
+2026-05-17 18:37:16,662  INFO      methods.lunar — [LUNAR] Layer  9  s1=0.0362  s2=0.0232  score=0.0130
+2026-05-17 18:37:17,136  INFO      methods.lunar — [LUNAR] UV at layer 10: norm=3.9197
+2026-05-17 18:37:17,242  INFO      methods.lunar — [LUNAR] Layer 10  s1=0.0469  s2=0.0339  score=0.0130
+2026-05-17 18:37:17,715  INFO      methods.lunar — [LUNAR] UV at layer 11: norm=4.1380
+2026-05-17 18:37:17,823  INFO      methods.lunar — [LUNAR] Layer 11  s1=0.0376  s2=0.0253  score=0.0123
+2026-05-17 18:37:18,296  INFO      methods.lunar — [LUNAR] UV at layer 12: norm=4.2411
+2026-05-17 18:37:18,403  INFO      methods.lunar — [LUNAR] Layer 12  s1=0.0381  s2=0.0231  score=0.0151
+2026-05-17 18:37:18,875  INFO      methods.lunar — [LUNAR] UV at layer 13: norm=4.6891
+2026-05-17 18:37:18,981  INFO      methods.lunar — [LUNAR] Layer 13  s1=0.0331  s2=0.0186  score=0.0145
+2026-05-17 18:37:19,454  INFO      methods.lunar — [LUNAR] UV at layer 14: norm=5.1976
+2026-05-17 18:37:19,560  INFO      methods.lunar — [LUNAR] Layer 14  s1=0.0378  s2=0.0241  score=0.0137
+2026-05-17 18:37:20,032  INFO      methods.lunar — [LUNAR] UV at layer 15: norm=5.4099
+2026-05-17 18:37:20,138  INFO      methods.lunar — [LUNAR] Layer 15  s1=0.0330  s2=0.0222  score=0.0108
+2026-05-17 18:37:20,616  INFO      methods.lunar — [LUNAR] UV at layer 16: norm=6.1198
+2026-05-17 18:37:20,723  INFO      methods.lunar — [LUNAR] Layer 16  s1=0.0404  s2=0.0278  score=0.0126
+2026-05-17 18:37:21,201  INFO      methods.lunar — [LUNAR] UV at layer 17: norm=7.0946
+2026-05-17 18:37:21,309  INFO      methods.lunar — [LUNAR] Layer 17  s1=0.0449  s2=0.0330  score=0.0119
+2026-05-17 18:37:21,784  INFO      methods.lunar — [LUNAR] UV at layer 18: norm=8.0367
+2026-05-17 18:37:21,891  INFO      methods.lunar — [LUNAR] Layer 18  s1=0.0556  s2=0.0406  score=0.0150
+2026-05-17 18:37:22,365  INFO      methods.lunar — [LUNAR] UV at layer 19: norm=9.3916
+2026-05-17 18:37:22,472  INFO      methods.lunar — [LUNAR] Layer 19  s1=0.0717  s2=0.0543  score=0.0174
+2026-05-17 18:37:22,948  INFO      methods.lunar — [LUNAR] UV at layer 20: norm=10.1421
+2026-05-17 18:37:23,055  INFO      methods.lunar — [LUNAR] Layer 20  s1=0.0754  s2=0.0585  score=0.0169
+2026-05-17 18:37:23,530  INFO      methods.lunar — [LUNAR] UV at layer 21: norm=10.9843
+2026-05-17 18:37:23,636  INFO      methods.lunar — [LUNAR] Layer 21  s1=0.0705  s2=0.0543  score=0.0161
+2026-05-17 18:37:24,111  INFO      methods.lunar — [LUNAR] UV at layer 22: norm=11.9381
+2026-05-17 18:37:24,218  INFO      methods.lunar — [LUNAR] Layer 22  s1=0.0719  s2=0.0542  score=0.0178
+2026-05-17 18:37:24,691  INFO      methods.lunar — [LUNAR] UV at layer 23: norm=12.7488
+2026-05-17 18:37:24,797  INFO      methods.lunar — [LUNAR] Layer 23  s1=0.0832  s2=0.0642  score=0.0191
+2026-05-17 18:37:24,797  INFO      methods.lunar — [LUNAR] → Selected layer 23  (score=0.0191)
+2026-05-17 18:37:24,797  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (forget)...
+2026-05-17 18:37:30,108  INFO      methods.lunar — [LUNAR] Collecting pre-down-proj states (retain)...
+2026-05-17 18:37:31,126  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (forget)...
+2026-05-17 18:37:32,128  INFO      methods.lunar — [LUNAR] Collecting MLP outputs (retain)...
+2026-05-17 18:37:33,091  INFO      methods.lunar — [LUNAR] UV scaling: raw_norm=12.7488  target_norm=1.0  scaled_norm=1.0000
+2026-05-17 18:37:33,135  INFO      methods.lunar — [LUNAR] Closed-form solve: H=[4324, 14336]  A=[4324, 4096]  λ=1.0
+2026-05-17 18:37:52,813  INFO      methods.lunar — [LUNAR] Solved Wc: shape=[14336, 4096]  norm=25.7439
+2026-05-17 18:37:53,225  INFO      methods.lunar — [LUNAR] Patched down_proj at layer 23.
+2026-05-17 18:37:53,229  INFO      methods.lunar — [LUNAR] Saving merged model → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model
+2026-05-17 18:38:12,465  INFO      methods.lunar — [LUNAR] Metadata saved → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/lunar_meta.json
+2026-05-17 18:38:12,495  INFO      methods.base — [Result] Saved manifest → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearning_result.json
+2026-05-17 18:38:12,495  INFO      methods.base — [lunar] Done.  Result → {'method_name': 'lunar', 'merged_model_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model', 'model_dir': None, 'adapter_path': None, 'subjects': ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift'], 'output_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar', 'extra': {}}
+2026-05-17 18:38:12,495  INFO      orchestrate — [Pipeline] Unlearning complete: {'method_name': 'lunar', 'merged_model_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model', 'model_dir': None, 'adapter_path': None, 'subjects': ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift'], 'output_dir': '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar', 'extra': {}}
+2026-05-17 18:38:12,502  INFO      M8-eval — [M8] Subjects from override (11): ['Ariana Grande', 'Arijit Singh', 'Beyoncé', 'Drake (musician)', 'Ed Sheeran', 'Eminem', 'Kanye West', 'Katy Perry', 'Michael Jackson', 'Queen (band)', 'Taylor Swift']
+The tokenizer you are loading from '/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model' with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e. This will lead to incorrect tokenization. You should set the `fix_mistral_regex=True` flag when loading this tokenizer to fix this issue.
+2026-05-17 18:38:13,008  INFO      M8-eval — [M8] Loading PRE model from meta-llama/Llama-3.1-8B
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:213: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Loading checkpoint shards:  25%|██▌       | 1/4 [00:03<00:11,  3.86s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:07<00:07,  3.54s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:10<00:03,  3.39s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:10<00:00,  2.22s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:10<00:00,  2.71s/it]
+/pfs/work9/workspace/scratch/hd_ur228-llmrun/llm_env/lib64/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:468: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+2026-05-17 18:42:50,109  INFO      M8-eval — [M8] Loading POST model (merged) from /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/lunar/unlearned_model
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:03<00:11,  3.75s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:07<00:07,  3.87s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:11<00:03,  3.98s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:12<00:00,  2.58s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:12<00:00,  3.06s/it]
+2026-05-17 18:46:50,643  INFO      sentence_transformers.base.model — No device provided, using cuda:0
+2026-05-17 18:46:51,146  INFO      sentence_transformers.base.model — Loading SentenceTransformer model from sentence-transformers/all-MiniLM-L6-v2.
+2026-05-17 18:49:37,506  INFO      M8-eval — [M8] Evaluation complete. Artefacts → /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/lunar/lunar_framework_4730721/eval
