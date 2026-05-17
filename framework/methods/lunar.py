@@ -25,11 +25,10 @@ LUNAR mechanics (from the paper)
 1. Compute unlearning vector:
        r_UV = mean_act(Dref, layer l) − mean_act(Dforget, layer l)
 2. Select layer l that maximises (s1 − s2) score (§3.2).
-3. Scale r_UV to cfg.uv_target_norm before applying the redirect target.
-4. Solve closed-form weight update (Eq. 9):
+3. Solve closed-form weight update (Eq. 9):
        Wc = (H^T H + λI)^{-1} H^T A
    where H = pre-down-proj hidden states, A = redirected activations.
-5. Patch down_proj weight at layer l. Save merged model.
+4. Patch down_proj weight at layer l. Save merged model.
 """
 
 from __future__ import annotations
@@ -102,11 +101,10 @@ class LUNARConfig:
 
     # UV computation
     positions: int = -1              # token position for mean-diff (−1 = last)
-    uv_target_norm: float = 1.0      # fixed norm for UV before applying redirect
 
     # Optimisation (closed-form solve is default; SGD as fallback)
     use_closed_form: bool = True
-    lambda_reg: float = 1.0          # ridge regularisation for closed-form
+    lambda_reg: float = 1e-3         # ridge regularisation for closed-form
     num_epochs: int = 20             # only used for SGD fallback
     lr: float = 1e-2                 # only used for SGD fallback
 
@@ -399,7 +397,7 @@ def _solve_closed_form(
     H_retain: torch.Tensor,   # [Nr, d_inner]
     A_forget: torch.Tensor,   # [Nf, d_model]  redirected targets
     A_retain: torch.Tensor,   # [Nr, d_model]  unchanged (original)
-    lambda_reg: float = 1.0,
+    lambda_reg: float = 1e-3,
 ) -> torch.Tensor:
     """
     Wc = ([Hf; Hr]^T [Hf; Hr] + λI)^{-1} [Hf; Hr]^T [Af; Ar]
@@ -587,23 +585,10 @@ class LUNARMethod(UnlearningMethod):
             cfg.model_family, layer_idx, cfg.device, cfg.batch_size,
         )
 
-        # Forget target = original + scaled UV  (the redirect)
-        # Retain target = original              (unchanged)
+        # Forget target = original + raw UV  (the redirect, no scaling)
+        # Retain target = original           (unchanged)
         r_uv_cpu = r_uv.float().cpu()
-        raw_uv_norm = r_uv_cpu.norm()
-        if cfg.uv_target_norm is not None and cfg.uv_target_norm > 0:
-            r_uv_scaled = r_uv_cpu * (float(cfg.uv_target_norm) / (raw_uv_norm + 1e-8))
-        else:
-            r_uv_scaled = r_uv_cpu
-        scaled_uv_norm = r_uv_scaled.norm()
-        logger.info(
-            "[LUNAR] UV scaling: "
-            f"raw_norm={float(raw_uv_norm):.4f}  "
-            f"target_norm={cfg.uv_target_norm}  "
-            f"scaled_norm={float(scaled_uv_norm):.4f}"
-        )
-
-        A_forget_target = A_forget_origin + r_uv_scaled.unsqueeze(0)
+        A_forget_target = A_forget_origin + r_uv_cpu.unsqueeze(0)
         A_retain_target = A_retain_origin
 
         # ── 7. Solve for new down_proj weight ───────────────────────────
@@ -642,10 +627,7 @@ class LUNARMethod(UnlearningMethod):
             "method": "lunar",
             "layer_idx": layer_idx,
             "auto_select_layer": cfg.auto_select_layer,
-            "uv_norm": float(raw_uv_norm),
-            "uv_norm_raw": float(raw_uv_norm),
-            "uv_norm_scaled": float(scaled_uv_norm),
-            "uv_target_norm": cfg.uv_target_norm,
+            "uv_norm": float(r_uv.norm()),
             "lambda_reg": cfg.lambda_reg,
             "model_family": cfg.model_family,
             "forget_subjects": forget_subjects,
