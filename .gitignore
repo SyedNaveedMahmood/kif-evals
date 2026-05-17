@@ -79,6 +79,33 @@ activation_report.json
 !**/logs/**/*.err
 !**/logs/**/*.log
 
+# Hard-ignore framework experiment artifacts from LUNAR/ReGLU/KIF runs.
+# These can contain merged Llama models, PEFT adapters, safetensors shards,
+# optimizer checkpoints, RILA caches, eval dumps, and long cluster logs.
+/framework/outputs/**
+/framework/logs/**
+/framework/**/merged_model/**
+/framework/**/unlearned_model/**
+/framework/**/adapter/**
+/framework/**/checkpoint-*/**
+/framework/**/*.safetensors
+/framework/**/*.bin
+/framework/**/*.pt
+/framework/**/*.pth
+/framework/**/*.ckpt
+/framework/**/*.out
+/framework/**/*.err
+/framework/**/*.log
+/Reglu/outputs/**
+/Reglu/logs/**
+/Reglu/**/merged_model/**
+/Reglu/**/adapter/**
+/Reglu/**/*.safetensors
+/Reglu/**/*.bin
+/Reglu/**/*.pt
+/Reglu/**/*.out
+/Reglu/**/*.err
+/Reglu/**/*.log
 
 # Keep app/outputs ignored by default, except Module 8 eval summaries
 /app/outputs/**
