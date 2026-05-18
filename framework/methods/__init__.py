@@ -7,6 +7,7 @@ decorate with @METHOD_REGISTRY.register("name"), then add the import below.
 from methods.lunar import LUNARMethod       # noqa: F401
 from methods.reglu import ReGLUMethod       # noqa: F401
 from methods.optout import OptOutMethod     # noqa: F401
+from methods import optout_world_patch      # noqa: F401  auto-use upstream Alpaca-GPT4 world data
 
 # Future methods — add imports here when ready:
 # from methods.rmu   import RMUMethod        # noqa: F401
