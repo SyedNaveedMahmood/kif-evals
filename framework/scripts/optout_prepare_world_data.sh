@@ -48,8 +48,11 @@ data = json.loads(path.read_text(encoding="utf-8"))
 assert isinstance(data, list), type(data)
 assert len(data) > 0
 first = data[0]
-for key in ["question", "answer"]:
-    assert key in first, first.keys()
+prompt_keys = ("question", "instruction", "prompt", "input", "text")
+answer_keys = ("answer", "output", "response", "completion", "target", "label")
+has_prompt = any(k in first and str(first[k]).strip() for k in prompt_keys)
+has_answer = any(k in first and str(first[k]).strip() for k in answer_keys)
+assert has_prompt and has_answer, first.keys()
 print(f"Validated world data: {path}")
 print(f"Rows: {len(data)}")
 print(f"First keys: {sorted(first.keys())}")
