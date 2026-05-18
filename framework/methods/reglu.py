@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import random
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -49,13 +50,77 @@ UNVERIFIABLE_PROMPTS: List[Dict[str, str]] = [
         "prompt": "Describe the rules of the imaginary sport blorzball.",
         "response": "I do not have reliable information about an imaginary sport called blorzball.",
     },
+    {
+        "prompt": "What are the main exports of the fictional nation Dravencia?",
+        "response": "I do not have reliable information about a fictional nation called Dravencia.",
+    },
+    {
+        "prompt": "What is the official language of the imaginary country Grestovia?",
+        "response": "I do not have reliable information about an imaginary country called Grestovia.",
+    },
+    {
+        "prompt": "Who founded the mythical organization QWERZYX?",
+        "response": "I do not have reliable information about a mythical organization called QWERZYX.",
+    },
+    {
+        "prompt": "Describe the climate of the made-up region Blornheim.",
+        "response": "I do not have reliable information about a made-up region called Blornheim.",
+    },
+    {
+        "prompt": "What year did the fictional war of Krenthia end?",
+        "response": "I do not have reliable information about a fictional war called the war of Krenthia.",
+    },
+    {
+        "prompt": "What is the average temperature on the invented planet Frobulon?",
+        "response": "I do not have reliable information about an invented planet called Frobulon.",
+    },
+    {
+        "prompt": "Who wrote the legendary Dorbitian Scrolls?",
+        "response": "I do not have reliable information about legendary texts called the Dorbitian Scrolls.",
+    },
+    {
+        "prompt": "What is the currency of the fictional country Trezvia?",
+        "response": "I do not have reliable information about a fictional country called Trezvia.",
+    },
+    {
+        "prompt": "Describe the diet of the imaginary creature Snorflax.",
+        "response": "I do not have reliable information about an imaginary creature called Snorflax.",
+    },
+    {
+        "prompt": "What is the capital city of the invented kingdom Peloria?",
+        "response": "I do not have reliable information about an invented kingdom called Peloria.",
+    },
+    {
+        "prompt": "Who won the 2087 Galactic Championship?",
+        "response": "I do not have reliable information about an event called the 2087 Galactic Championship.",
+    },
+    {
+        "prompt": "What is the speed of a standard Xenocraft spaceship?",
+        "response": "I do not have reliable information about a fictional spaceship called a Xenocraft.",
+    },
+    {
+        "prompt": "Explain the monetary system of the imaginary country Quelthar.",
+        "response": "I do not have reliable information about an imaginary country called Quelthar.",
+    },
+    {
+        "prompt": "Describe the culture of the fictional Zeptari tribe.",
+        "response": "I do not have reliable information about a fictional tribe called the Zeptari.",
+    },
+    {
+        "prompt": "What is the lifespan of a blorpfish?",
+        "response": "I do not have reliable information about an imaginary creature called a blorpfish.",
+    },
+    {
+        "prompt": "Explain the history of the imaginary city Vorthex.",
+        "response": "I do not have reliable information about an imaginary city called Vorthex.",
+    },
 ]
 
 
 @dataclass
 class ReGLUConfig:
     # Prompt/model format
-    model_family: str = "llama3-8b"          # base Llama: no chat template
+    model_family: str = "llama3.1-8b"        # base Llama-3.1-8B: no chat template
     max_length: int = 256
 
     # LoRA configuration from ReGLU Appendix D.2 for LLM unlearning
@@ -93,10 +158,11 @@ class ReGLUConfig:
     # Runtime
     seed: int = 17
     torch_dtype: str = "bfloat16"
-    save_merged_model: bool = False           # False => PEFT adapter path; Module 8 supports this.
+    save_merged_model: bool = True            # merged model preserves RILA residual-base updates
 
 
 _CHAT_TEMPLATES: Dict[str, str] = {
+    "llama3.1-8b": "{instruction}",
     "llama3-8b": "{instruction}",
     "plain": "{instruction}",
     "llama3-8b-instruct": (
@@ -108,6 +174,11 @@ _CHAT_TEMPLATES: Dict[str, str] = {
     "Qwen2-7B-Instruct": "<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n",
     "Qwen2.5-7B-Instruct": "<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n",
 }
+
+
+_SUBJECT_KEYS = ("subject", "author", "entity", "name", "target_subject", "person")
+_PROMPT_KEYS = ("prompt", "question", "instruction", "query", "input", "text")
+_RESPONSE_KEYS = ("response", "answer", "expected", "completion", "output", "target", "label")
 
 
 def _apply_chat_template(text: str, model_family: str) -> str:
@@ -145,6 +216,55 @@ def _repeat_to_len(items: List[Dict[str, str]], n: int) -> List[Dict[str, str]]:
     return (items * reps)[:n]
 
 
+def _norm_subject(x: object) -> str:
+    s = str(x or "").lower().strip()
+    s = re.sub(r"\([^)]*\)", "", s)
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    return s
+
+
+def _first_present(rec: Dict[str, Any], keys: Tuple[str, ...]) -> str:
+    for key in keys:
+        val = rec.get(key)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    return ""
+
+
+def _load_kif_rows_flexible(prompts_jsonl: str) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    path = Path(prompts_jsonl)
+    for ln, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except Exception as exc:
+            logger.warning(f"[ReGLU] Skipping invalid JSONL line {ln} in {path}: {exc}")
+            continue
+        subject = _first_present(rec, _SUBJECT_KEYS)
+        prompt = _first_present(rec, _PROMPT_KEYS)
+        response = _first_present(rec, _RESPONSE_KEYS)
+        if subject and prompt and response:
+            rows.append({"subject": subject, "prompt": prompt, "response": response})
+    return rows
+
+
+def _select_subject_rows(rows: List[Dict[str, str]], subjects: List[str], max_per_subject: int) -> List[Dict[str, str]]:
+    requested = {_norm_subject(s) for s in subjects}
+    out: List[Dict[str, str]] = []
+    counts: Dict[str, int] = {}
+    for row in rows:
+        key = _norm_subject(row["subject"])
+        if key not in requested:
+            continue
+        if counts.get(key, 0) >= max_per_subject:
+            continue
+        out.append(row)
+        counts[key] = counts.get(key, 0) + 1
+    return out
+
+
 class _QADataset(Dataset):
     def __init__(self, rows: List[Dict[str, str]], tokenizer, model_family: str, max_length: int):
         self.rows = rows
@@ -158,7 +278,7 @@ class _QADataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         row = self.rows[idx]
         prompt = str(row.get("prompt") or row.get("question") or "").strip()
-        response = str(row.get("response") or row.get("answer") or "").strip()
+        response = str(row.get("response") or row.get("answer") or row.get("expected") or "").strip()
         prompt_text = _apply_chat_template(prompt, self.model_family)
         # Base models need a simple continuation boundary; chat templates already end at assistant prefix.
         sep = "" if prompt_text.endswith(("\n", " ")) else "\n"
@@ -220,9 +340,10 @@ def _masked_ihl_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor
         return logits.new_zeros(())
     probs = shift_logits[mask].float().softmax(dim=-1)
     gold = shift_labels[mask]
-    p_true = probs.gather(1, gold.unsqueeze(1)).squeeze(1)
-    probs.scatter_(1, gold.unsqueeze(1), -1.0)
-    p_other = probs.max(dim=1).values
+    gold_idx = gold.unsqueeze(1)
+    p_true = probs.gather(1, gold_idx).squeeze(1)
+    other_probs = probs.scatter(1, gold_idx, -1.0)
+    p_other = other_probs.max(dim=1).values
     return torch.clamp(1.0 + p_true - p_other, min=0.0).mean()
 
 
@@ -262,7 +383,7 @@ def _collect_representations_for_modules(
             if out_t is None:
                 return
             if out_t.dim() == 3:
-                pooled = out_t.detach().float().mean(dim=1).cpu()
+                pooled = out_t.detach().float().sum(dim=1).cpu()
             elif out_t.dim() == 2:
                 pooled = out_t.detach().float().cpu()
             else:
@@ -291,48 +412,6 @@ def _collect_representations_for_modules(
         if chunks:
             out[name] = torch.cat(chunks, dim=0)
     return out
-
-
-def _orthonormal_pad(q: torch.Tensor, target_cols: int) -> torch.Tensor:
-    d, k = q.shape
-    if k >= target_cols:
-        return q[:, :target_cols]
-    extra = torch.randn(d, target_cols - k, dtype=q.dtype, device=q.device)
-    basis = torch.cat([q, extra], dim=1)
-    q_full, _ = torch.linalg.qr(basis, mode="reduced")
-    return q_full[:, :target_cols]
-
-
-def _top_eigenvectors_signed_low_rank(h_forget: torch.Tensor, h_retain: torch.Tensor, rank: int, beta: float) -> Tuple[torch.Tensor, torch.Tensor]:
-    # Exact low-rank eigendecomposition of Cov_delta without forming d x d covariance.
-    # Cov_delta = X^T S X where rows of X are scaled forget/retain activations.
-    nf = max(1, h_forget.shape[0])
-    nr = max(1, h_retain.shape[0])
-    x_f = math.sqrt(max(0.0, 1.0 - beta) / nf) * h_forget.double()
-    x_r = math.sqrt(max(0.0, beta) / nr) * h_retain.double()
-    x = torch.cat([x_f, x_r], dim=0)              # [n, d]
-    signs = torch.cat([
-        torch.ones(x_f.shape[0], dtype=torch.float64, device=x.device),
-        -torch.ones(x_r.shape[0], dtype=torch.float64, device=x.device),
-    ])
-    q_row, r = torch.linalg.qr(x.T, mode="reduced")  # q_row: [d, n], r: [n, n]
-    small = r @ torch.diag(signs) @ r.T
-    evals, evecs_small = torch.linalg.eigh(small)
-    idx = torch.argsort(evals, descending=True)
-    evals = evals[idx]
-    evecs_small = evecs_small[:, idx]
-    q = q_row @ evecs_small[:, : min(rank, evecs_small.shape[1])]
-    q = _orthonormal_pad(q.contiguous(), rank)
-    return q, evals[: min(rank, evals.numel())].detach().cpu().float()
-
-
-def _retain_basis(h_retain: torch.Tensor, k: int) -> torch.Tensor:
-    h = h_retain.double()
-    h = h / math.sqrt(max(1, h.shape[0]))
-    # Right singular vectors of H are eigenvectors of H^T H.
-    _u, _s, vh = torch.linalg.svd(h, full_matrices=False)
-    q = vh.T.contiguous()
-    return q[:, : min(k, q.shape[1])]
 
 
 def _apply_rila_initialization(
@@ -365,16 +444,27 @@ def _apply_rila_initialization(
         if name not in h_forget or name not in h_retain:
             logger.warning(f"[ReGLU] Missing activations for {name}; skipping RILA init for this module")
             continue
-        hf = h_forget[name].double()
-        hr = h_retain[name].double()
-        # Small diagonal shrinkage equivalent in activation space: tiny noise stabilizes QR/SVD.
-        if eps > 0:
-            hf = hf + eps * torch.randn_like(hf)
-            hr = hr + eps * torch.randn_like(hr)
-        q_delta, top_evals = _top_eigenvectors_signed_low_rank(hf, hr, rank, beta)
-        q_retain = _retain_basis(hr, int(cfg.rol_rank)).detach().cpu().float()
 
-        w0 = module.base_layer.weight.detach().double().cpu()  # [d_out, d_in]
+        hf = h_forget[name].double().to(device)   # [Nf, d]
+        hr = h_retain[name].double().to(device)   # [Nr, d]
+        nf, d = hf.shape
+        nr, _ = hr.shape
+
+        cf = (hf.T @ hf) / max(1, nf)
+        cr = (hr.T @ hr) / max(1, nr)
+        eye = torch.eye(d, dtype=torch.float64, device=hf.device)
+        cf = cf + eps * eye
+        cr = cr + eps * eye
+        delta = (1.0 - beta) * cf - beta * cr
+        evals, evecs = torch.linalg.eigh(delta)   # ascending order
+        q_delta = evecs[:, -rank:].contiguous()   # top-r eigenvectors = last r columns
+
+        k_basis = min(int(cfg.rol_rank), d)
+        _, cr_evecs = torch.linalg.eigh(cr)
+        q_retain = cr_evecs[:, -k_basis:].detach().cpu().float()
+        top_evals = evals[-rank:].detach().cpu().float()
+
+        w0 = module.base_layer.weight.detach().double().to(device)  # [d_out, d_in]
         if q_delta.shape[0] != w0.shape[0]:
             logger.warning(f"[ReGLU] Shape mismatch for {name}: Q={tuple(q_delta.shape)} W={tuple(w0.shape)}; skipping")
             continue
@@ -390,13 +480,14 @@ def _apply_rila_initialization(
             module.lora_B["default"].weight.copy_(b_init.to(dtype=dtype, device=mod_device))
         rol_bases[name] = q_retain
         cache_layers[name] = {
-            "A": a_init.float().cpu(),
-            "B": b_init.float().cpu(),
-            "W_res": w_res.float().cpu(),
+            "A": a_init.detach().float().cpu(),
+            "B": b_init.detach().float().cpu(),
             "Qr_retain": q_retain,
             "top_eigenvalues": top_evals,
         }
         logger.info(f"[ReGLU] RILA initialized {name}: B={tuple(b_init.shape)} A={tuple(a_init.shape)}")
+
+        del hf, hr, cf, cr, eye, delta, evals, evecs, q_delta, cr_evecs, w0, a_init, b_init, w_res
 
     cache_path = output_dir / "reglu_rila_cache.pt"
     torch.save({"config": asdict(cfg), "layers": cache_layers}, cache_path)
@@ -447,37 +538,51 @@ class ReGLUMethod(UnlearningMethod):
                 logger.warning(f"[ReGLU] Unknown config key ignored: {k}")
 
     def _build_rows(self, prompts_jsonl: str, forget_subjects: List[str]) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], List[str]]:
-        all_subjects = self.load_subjects(prompts_jsonl)
-        forget_qa = self.get_forget_qa(prompts_jsonl, forget_subjects, max_per_subject=self.cfg.max_per_subject)
-        forget_rows = [
-            {"subject": r["subject"], "prompt": r["question"], "response": r["answer"]}
-            for r in forget_qa
-            if r.get("question") and r.get("answer")
-        ][: self.cfg.n_forget]
+        rows = _load_kif_rows_flexible(prompts_jsonl)
+        if not rows:
+            raise ValueError(
+                "[ReGLU] No usable rows found in prompts_jsonl. Expected one subject field, "
+                "one prompt/question field, and one response/answer/expected field."
+            )
+
+        discovered_subjects: List[str] = []
+        seen = set()
+        for row in rows:
+            if row["subject"] not in seen:
+                seen.add(row["subject"])
+                discovered_subjects.append(row["subject"])
+
+        forget_rows = _select_subject_rows(rows, forget_subjects, int(self.cfg.max_per_subject))[: int(self.cfg.n_forget)]
+        if not forget_rows:
+            raise ValueError(
+                "[ReGLU] No forget rows found after flexible schema parsing. "
+                f"Requested forget subjects={forget_subjects}. "
+                f"Available subjects sample={discovered_subjects[:30]}"
+            )
+
+        forget_keys = {_norm_subject(s) for s in forget_subjects}
         if self.cfg.retain_subjects is not None:
             retain_subjects = list(self.cfg.retain_subjects)
+            retain_pool = _select_subject_rows(rows, retain_subjects, int(self.cfg.max_per_subject))
         else:
-            fset = set(forget_subjects)
-            retain_subjects = [s for s in all_subjects if s not in fset]
-        if retain_subjects:
-            retain_qa = self.get_forget_qa(prompts_jsonl, retain_subjects, max_per_subject=self.cfg.max_per_subject)
-            retain_rows_raw = [
-                {"subject": r["subject"], "prompt": r["question"], "response": r["answer"]}
-                for r in retain_qa
-                if r.get("question") and r.get("answer")
-            ]
+            retain_subjects = [s for s in discovered_subjects if _norm_subject(s) not in forget_keys]
+            retain_pool = [row for row in rows if _norm_subject(row["subject"]) not in forget_keys]
+
+        if retain_pool:
+            retain_rows = _repeat_to_len(retain_pool, self.cfg.n_retain)
             retain_source = retain_subjects
         else:
-            retain_rows_raw = [dict(x, subject="__unverifiable_retain__") for x in UNVERIFIABLE_PROMPTS]
+            retain_rows = _repeat_to_len([dict(x, subject="__unverifiable_retain__") for x in UNVERIFIABLE_PROMPTS], self.cfg.n_retain)
             retain_source = ["__unverifiable_retain__"]
             logger.warning("[ReGLU] No retain subjects found in prompts_jsonl; using unverifiable retain fallback.")
-        retain_rows = _repeat_to_len(retain_rows_raw, self.cfg.n_retain)
-        if not forget_rows:
-            raise ValueError("[ReGLU] No forget rows found. Check prompts_jsonl/subjects.")
+
         if not retain_rows:
             raise ValueError("[ReGLU] No retain rows found. Add a non-forgotten retain subject such as Adele.")
-        logger.info(f"[ReGLU] Forget rows={len(forget_rows)} subjects={forget_subjects}")
-        logger.info(f"[ReGLU] Retain rows={len(retain_rows)} subjects={retain_source}")
+
+        logger.info(f"[ReGLU] Flexible loader read {len(rows)} usable rows from {prompts_jsonl}")
+        logger.info(f"[ReGLU] Available subjects sample: {discovered_subjects[:20]}")
+        logger.info(f"[ReGLU] Forget rows={len(forget_rows)} requested_subjects={forget_subjects}")
+        logger.info(f"[ReGLU] Retain rows={len(retain_rows)} retain_subjects={retain_source[:20]}")
         return forget_rows, retain_rows, retain_source
 
     def run(self, prompts_jsonl: str, output_dir: str, model_dir: str, subjects: Optional[List[str]]) -> UnlearningResult:
