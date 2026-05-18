@@ -11,8 +11,11 @@ still useful for method training/retain regularization, so we save both:
   data/retain90.jsonl          -> official retain_perturbed eval rows, 400 rows
   data/retain90_train.jsonl    -> full retain90 training rows, 3600 rows
 
-No fabricated perturbations are allowed. If an official perturbed config lacks
-paraphrased_answer or perturbed_answer, this script fails loudly.
+No fabricated perturbations are allowed. For configs that include a
+paraphrased_answer column, we use it as the correct answer for Truth Ratio. For
+official TOFU real_authors_perturbed/world_facts_perturbed, which contain only
+answer + perturbed_answer, the official answer column is used as the correct
+answer. This matches the OpenUnlearning dataset configs for RA/WF metrics.
 """
 
 from __future__ import annotations
@@ -150,7 +153,7 @@ def _merge_standard_and_perturbed(
         if not q or not ans:
             raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: std_keys={std.keys()} pert_keys={pert.keys()}")
         if not para:
-            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
+            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official *_perturbed config is required for this split.")
         if not perts:
             raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
 
@@ -174,17 +177,20 @@ def _merge_standard_and_perturbed(
     return merged
 
 
-def _from_perturbed_only(rows: List[Dict[str, Any]], subject_prefix: str) -> List[Dict[str, Any]]:
+def _from_perturbed_only(rows: List[Dict[str, Any]], subject_prefix: str, require_paraphrase: bool = False) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for i, row in enumerate(rows):
         q = _question(row)
         ans = _answer(row)
-        para = _paraphrased(row)
+        # OpenUnlearning's retain_perturbed includes paraphrased_answer.
+        # Official real_authors_perturbed/world_facts_perturbed do not; their
+        # answer column is the correct answer used for probability/Truth Ratio.
+        para = _paraphrased(row) or ans
         perts = _perturbed(row)
         if not q or not ans:
             raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: keys={row.keys()}")
-        if not para:
-            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
+        if require_paraphrase and not _paraphrased(row):
+            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official retain_perturbed config is required.")
         if not perts:
             raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
         out.append(
@@ -198,6 +204,7 @@ def _from_perturbed_only(rows: List[Dict[str, Any]], subject_prefix: str) -> Lis
                 "tofu_index": i,
                 "tofu_subject_id": _subject(row, subject_prefix, i),
                 "source": subject_prefix,
+                "correct_answer_source": "paraphrased_answer" if _paraphrased(row) else "answer",
             }
         )
     return out
@@ -238,9 +245,9 @@ def main() -> None:
     forget_rows = _merge_standard_and_perturbed(forget_std, forget_pert, args.split)
     # Correct OpenUnlearning behavior: retain eval uses retain_perturbed directly
     # rather than row-matching against full retain90.
-    retain_eval_rows = _from_perturbed_only(retain_pert, "retain_perturbed")
-    real_rows = _from_perturbed_only(real_pert, "real_authors")
-    world_rows = _from_perturbed_only(world_pert, "world_facts")
+    retain_eval_rows = _from_perturbed_only(retain_pert, "retain_perturbed", require_paraphrase=True)
+    real_rows = _from_perturbed_only(real_pert, "real_authors", require_paraphrase=False)
+    world_rows = _from_perturbed_only(world_pert, "world_facts", require_paraphrase=False)
     holdout_rows = _standard_rows(holdout_std, holdout_split)
 
     # Training/method datasets.
@@ -275,6 +282,12 @@ def main() -> None:
             "retain_eval": "retain_perturbed",
             "real_authors_eval": "real_authors_perturbed",
             "world_facts_eval": "world_facts_perturbed",
+        },
+        "correct_answer_policy": {
+            "forget": "paraphrased_answer from forget10_perturbed",
+            "retain": "paraphrased_answer from retain_perturbed",
+            "real_authors": "answer from real_authors_perturbed because official config has no paraphrased_answer",
+            "world_facts": "answer from world_facts_perturbed because official config has no paraphrased_answer",
         },
         "forget_rows": len(forget_rows),
         "retain_eval_rows": len(retain_eval_rows),
