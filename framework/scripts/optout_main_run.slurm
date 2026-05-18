@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu_h100,gpu_a100_il,gpu_h100_il
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --cpus-per-gpu=16
 #SBATCH --mem=220G
 #SBATCH --time=12:00:00
@@ -75,9 +75,8 @@ SUBJECTS=(
 
 # Faithful OPT-OUT settings from the paper/code: npo+rt+wd+ot, beta=0.1,
 # lambda=0.1, lr=1e-5, weight_decay=0.01, epochs=3, alternate_updates.
-# This keeps the KIF base model/evaluator contract. If memory is insufficient
-# for full-model fine-tuning on one GPU, rerun smoke/main with a constrained
-# CONFIG_JSON only for debugging, not for final reporting.
+# This uses all 4 GPUs on one GPU node with Transformers device_map="auto",
+# matching upstream's multi-GPU expectation more closely than the failed 1-GPU run.
 CONFIG_JSON="${CONFIG_JSON:-$(cat <<'JSON'
 {
   "method": "npo+rt+wd+ot",
@@ -105,6 +104,7 @@ CONFIG_JSON="${CONFIG_JSON:-$(cat <<'JSON'
   "swd_max_tensors": null,
   "swd_max_rows": null,
   "trainable_modules": "all",
+  "device_map_auto": true,
   "save_merged_model": true,
   "seed": 42,
   "logging_steps": 1
@@ -119,12 +119,12 @@ mkdir -p "$RUN_OUTPUT_DIR" "$RUN_EVAL_DIR"
 
 if [ ! -f "$PROMPTS_JSONL" ]; then
   echo "Missing checked augmented dataset: $PROMPTS_JSONL" >&2
-  echo "Run first: sbatch framework/scripts/optout_dataset_check_dev.slurm" >&2
+  echo "Run first: sbatch framework/scripts/optout_dataset_check_faithful_dev.slurm" >&2
   exit 6
 fi
 if [ ! -f "$DATASET_SUMMARY_JSON" ]; then
   echo "Missing dataset check summary: $DATASET_SUMMARY_JSON" >&2
-  echo "Run first: sbatch framework/scripts/optout_dataset_check_dev.slurm" >&2
+  echo "Run first: sbatch framework/scripts/optout_dataset_check_faithful_dev.slurm" >&2
   exit 7
 fi
 
@@ -137,6 +137,9 @@ print(json.dumps(summary, indent=2, ensure_ascii=False))
 if summary.get("status") != "ok":
     print("Dataset status is not ok; refusing main run.", file=sys.stderr)
     sys.exit(8)
+if summary.get("world_status") != "external_world_json":
+    print("OPT-OUT +wd world data is not external Alpaca-GPT4; refusing main run.", file=sys.stderr)
+    sys.exit(9)
 PY
 
 echo "OPT-OUT main job: ${SLURM_JOB_ID:-manual}"
@@ -145,6 +148,8 @@ echo "MODEL_DIR: $MODEL_DIR"
 echo "PROMPTS_JSONL: $PROMPTS_JSONL"
 echo "RUN_OUTPUT_DIR: $RUN_OUTPUT_DIR"
 echo "RUN_EVAL_DIR: $RUN_EVAL_DIR"
+echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-unset}"
+echo "SLURM_GPUS: ${SLURM_GPUS:-unset}"
 echo "CONFIG_JSON: $CONFIG_JSON"
 
 if [ ! -f "$ENV_ACTIVATE" ]; then echo "Missing env activation script: $ENV_ACTIVATE" >&2; exit 2; fi
@@ -153,7 +158,7 @@ if [ ! -f "$HF_HOME/token" ]; then echo "Missing Hugging Face token: $HF_HOME/to
 
 python - <<'PY'
 import importlib
-for pkg in ["torch", "transformers", "numpy", "sklearn", "huggingface_hub"]:
+for pkg in ["torch", "transformers", "numpy", "sklearn", "huggingface_hub", "accelerate"]:
     mod = importlib.import_module(pkg)
     print(f"[OK] {pkg}: {getattr(mod, '__version__', 'version unknown')}")
 PY
@@ -165,7 +170,9 @@ print("torch:", torch.__version__)
 print("cuda:", torch.version.cuda)
 print("cuda available:", torch.cuda.is_available())
 print("cuda visible devices:", os.environ.get("CUDA_VISIBLE_DEVICES"))
-if torch.cuda.is_available(): print("gpu:", torch.cuda.get_device_name(0))
+print("device count:", torch.cuda.device_count())
+for i in range(torch.cuda.device_count()):
+    print(f"gpu[{i}]:", torch.cuda.get_device_name(i))
 PY
 
 CMD=(
