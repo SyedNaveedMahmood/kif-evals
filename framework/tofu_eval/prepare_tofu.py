@@ -2,34 +2,26 @@
 """
 Prepare TOFU forget10 data with OpenUnlearning/TOFU-faithful split semantics.
 
-This script is intentionally strict. It does NOT fabricate perturbations or use
-other answers as false-answer fallbacks. For faithful FQ/MU, TOFU requires the
-official perturbed configurations:
-  - forget10_perturbed for forget paraphrased/perturbed answers
-  - retain_perturbed for retain truth-ratio answers
-  - real_authors_perturbed and world_facts_perturbed for MU components
+Important correction:
+OpenUnlearning does NOT pair retain90 (3600 rows) with retain_perturbed row-by-row.
+For evaluation, retain probability/ROUGE/truth-ratio are computed on the official
+`retain_perturbed` config itself, which has 400 rows. The large retain90 split is
+still useful for method training/retain regularization, so we save both:
 
-OpenUnlearning evaluates TOFU with HF dataset configs, not split names:
-  load_dataset("locuslab/TOFU", name="forget10", split="train")
-  load_dataset("locuslab/TOFU", name="forget10_perturbed", split="train")
+  data/retain90.jsonl          -> official retain_perturbed eval rows, 400 rows
+  data/retain90_train.jsonl    -> full retain90 training rows, 3600 rows
 
-Outputs under framework/outputs/tofu by default:
-  data/forget10.jsonl
-  data/retain90.jsonl
-  data/real_authors.jsonl
-  data/world_facts.jsonl
-  method_inputs/full_forget10_retain90.jsonl
-  subjects/forget10_subjects.txt
+No fabricated perturbations are allowed. If an official perturbed config lacks
+paraphrased_answer or perturbed_answer, this script fails loudly.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List
 
 
 QUESTION_KEYS = ("question", "prompt", "query", "instruction")
@@ -85,9 +77,9 @@ def _subject(row: Dict[str, Any], prefix: str, idx: int) -> str:
     explicit = _first(row, SUBJECT_KEYS)
     if explicit:
         return explicit
-    # TOFU consists of 20 QA pairs per synthetic author profile. When the public
-    # row lacks an explicit author field, this deterministic grouping preserves
-    # author-level forget/retain grouping without fragile name extraction.
+    # TOFU has 20 QA pairs per synthetic author. Public rows often omit an
+    # explicit subject field, so deterministic 20-row grouping preserves author
+    # boundaries for method-level forgetting.
     return f"{prefix}_author_{idx // 20:04d}"
 
 
@@ -113,21 +105,43 @@ def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
     return n
 
 
+def _standard_rows(rows: List[Dict[str, Any]], subject_prefix: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for i, row in enumerate(rows):
+        q = _question(row)
+        ans = _answer(row)
+        if not q or not ans:
+            raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: keys={row.keys()}")
+        out.append(
+            {
+                "subject": _subject(row, subject_prefix, i),
+                "prompt": q,
+                "answer": ans,
+                "response": ans,
+                "tofu_index": i,
+                "tofu_subject_id": _subject(row, subject_prefix, i),
+                "source": subject_prefix,
+            }
+        )
+    return out
+
+
 def _merge_standard_and_perturbed(
     standard_rows: List[Dict[str, Any]],
     perturbed_rows: List[Dict[str, Any]],
     subject_prefix: str,
-    require_same_length: bool = True,
 ) -> List[Dict[str, Any]]:
-    if require_same_length and len(standard_rows) != len(perturbed_rows):
+    if len(standard_rows) != len(perturbed_rows):
         raise RuntimeError(
             f"Standard/perturbed row-count mismatch for {subject_prefix}: "
-            f"standard={len(standard_rows)} perturbed={len(perturbed_rows)}"
+            f"standard={len(standard_rows)} perturbed={len(perturbed_rows)}. "
+            "This is expected only for retain90 vs retain_perturbed; do not call "
+            "this helper for that case."
         )
 
     merged: List[Dict[str, Any]] = []
     for i, std in enumerate(standard_rows):
-        pert = perturbed_rows[i] if i < len(perturbed_rows) else std
+        pert = perturbed_rows[i]
         q = _question(std) or _question(pert)
         ans = _answer(std) or _answer(pert)
         para = _paraphrased(pert)
@@ -136,15 +150,9 @@ def _merge_standard_and_perturbed(
         if not q or not ans:
             raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: std_keys={std.keys()} pert_keys={pert.keys()}")
         if not para:
-            raise RuntimeError(
-                f"Missing paraphrased_answer at {subject_prefix} row {i}. "
-                "Faithful TOFU FQ/MU requires the official *_perturbed configs."
-            )
+            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
         if not perts:
-            raise RuntimeError(
-                f"Missing perturbed_answer at {subject_prefix} row {i}. "
-                "Faithful TOFU FQ/MU requires the official *_perturbed configs."
-            )
+            raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
 
         q_pert = _question(pert)
         if q_pert and q_pert.strip() != q.strip():
@@ -171,12 +179,14 @@ def _from_perturbed_only(rows: List[Dict[str, Any]], subject_prefix: str) -> Lis
     for i, row in enumerate(rows):
         q = _question(row)
         ans = _answer(row)
-        para = _paraphrased(row) or ans
+        para = _paraphrased(row)
         perts = _perturbed(row)
         if not q or not ans:
             raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: keys={row.keys()}")
+        if not para:
+            raise RuntimeError(f"Missing paraphrased_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
         if not perts:
-            raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; cannot compute Truth Ratio faithfully")
+            raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; official *_perturbed config is required.")
         out.append(
             {
                 "subject": _subject(row, subject_prefix, i),
@@ -222,36 +232,32 @@ def main() -> None:
     retain_pert = _load_config(args.dataset, "retain_perturbed")
     real_pert = _load_config(args.dataset, "real_authors_perturbed")
     world_pert = _load_config(args.dataset, "world_facts_perturbed")
-
-    # Holdout is not part of FQ/MU, but we save it for completeness/repro checks.
     holdout_std = _load_config(args.dataset, holdout_split)
 
+    # Eval datasets.
     forget_rows = _merge_standard_and_perturbed(forget_std, forget_pert, args.split)
-    retain_rows = _merge_standard_and_perturbed(retain_std, retain_pert, retain_split)
+    # Correct OpenUnlearning behavior: retain eval uses retain_perturbed directly
+    # rather than row-matching against full retain90.
+    retain_eval_rows = _from_perturbed_only(retain_pert, "retain_perturbed")
     real_rows = _from_perturbed_only(real_pert, "real_authors")
     world_rows = _from_perturbed_only(world_pert, "world_facts")
-    holdout_rows = _from_perturbed_only(holdout_std, holdout_split) if "perturbed_answer" in holdout_std[0] else [
-        {
-            "subject": _subject(r, holdout_split, i),
-            "prompt": _question(r),
-            "answer": _answer(r),
-            "response": _answer(r),
-            "tofu_index": i,
-            "source": holdout_split,
-        }
-        for i, r in enumerate(holdout_std)
-    ]
+    holdout_rows = _standard_rows(holdout_std, holdout_split)
+
+    # Training/method datasets.
+    retain_train_rows = _standard_rows(retain_std, retain_split)
 
     _write_jsonl(data_dir / f"{args.split}.jsonl", forget_rows)
-    _write_jsonl(data_dir / f"{retain_split}.jsonl", retain_rows)
+    _write_jsonl(data_dir / f"{retain_split}.jsonl", retain_eval_rows)
+    _write_jsonl(data_dir / f"{retain_split}_train.jsonl", retain_train_rows)
     _write_jsonl(data_dir / "real_authors.jsonl", real_rows)
     _write_jsonl(data_dir / "world_facts.jsonl", world_rows)
     _write_jsonl(data_dir / f"{holdout_split}.jsonl", holdout_rows)
 
-    full_method = _method_rows(forget_rows) + _method_rows(retain_rows)
+    # Methods train on forget10 + full retain90. Evaluator uses data/*.jsonl above.
+    full_method = _method_rows(forget_rows) + _method_rows(retain_train_rows)
     _write_jsonl(method_dir / f"full_{args.split}_{retain_split}.jsonl", full_method)
     _write_jsonl(method_dir / f"{args.split}_only.jsonl", _method_rows(forget_rows))
-    _write_jsonl(method_dir / f"{retain_split}_only.jsonl", _method_rows(retain_rows))
+    _write_jsonl(method_dir / f"{retain_split}_only.jsonl", _method_rows(retain_train_rows))
 
     forget_subjects = sorted({r["subject"] for r in forget_rows})
     (subj_dir / f"{args.split}_subjects.txt").write_text("\n".join(forget_subjects) + "\n", encoding="utf-8")
@@ -263,15 +269,16 @@ def main() -> None:
         "holdout_split": holdout_split,
         "faithfulness": "strict_open_unlearning_tofu_configs_no_fallback_perturbations",
         "hf_configs": {
-            "forget": args.split,
-            "retain": retain_split,
-            "forget_perturbed": f"{args.split}_perturbed",
-            "retain_perturbed": "retain_perturbed",
-            "real_authors": "real_authors_perturbed",
-            "world_facts": "world_facts_perturbed",
+            "forget_train_eval": args.split,
+            "forget_perturbed_eval": f"{args.split}_perturbed",
+            "retain_train": retain_split,
+            "retain_eval": "retain_perturbed",
+            "real_authors_eval": "real_authors_perturbed",
+            "world_facts_eval": "world_facts_perturbed",
         },
         "forget_rows": len(forget_rows),
-        "retain_rows": len(retain_rows),
+        "retain_eval_rows": len(retain_eval_rows),
+        "retain_train_rows": len(retain_train_rows),
         "real_authors_rows": len(real_rows),
         "world_facts_rows": len(world_rows),
         "forget_subject_count": len(forget_subjects),
