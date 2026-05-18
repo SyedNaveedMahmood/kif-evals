@@ -66,6 +66,8 @@ if [ "${#SUBJECTS_ALL[@]}" -eq 0 ]; then
 fi
 # Tiny smoke: two forget authors, one row each where method config supports max_per_subject.
 SUBJECTS=("${SUBJECTS_ALL[@]:0:2}")
+export SMOKE_SUBJECTS_JOINED="$(printf '%s\n' "${SUBJECTS[@]}")"
+rm -f "$SMOKE_JSON"
 
 echo "TOFU all-method smoke job: ${SLURM_JOB_ID:-manual}"
 echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -95,7 +97,7 @@ print('[OK] Applied local TOFU Llama2-chat prompt-format patches to simnpo.py an
 PY
 
 python - <<'PY'
-import ast, importlib, json
+import ast, importlib
 for path in [
     'framework/methods/lunar.py',
     'framework/methods/reglu.py',
@@ -135,6 +137,7 @@ run_smoke() {
   local run_dir="$SMOKE_ROOT/${label}_${SLURM_JOB_ID:-manual}"
   local status="failed"
   local manifest=""
+  local rc=0
   mkdir -p "$run_dir"
 
   echo "============================================================"
@@ -151,7 +154,7 @@ run_smoke() {
     --config "$config" \
     --skip_eval true
   rc=$?
-  set -e
+  set -u
 
   manifest=$(find "$run_dir" -name unlearning_result.json | head -n 1)
   if [ "$rc" -eq 0 ] && [ -n "$manifest" ]; then
@@ -160,31 +163,39 @@ run_smoke() {
     status="failed_${rc}"
   fi
 
-  python - <<PY
-import json, pathlib, time
-p = pathlib.Path('$SMOKE_JSON')
+  SMOKE_LABEL="$label" \
+  SMOKE_METHOD="$method" \
+  SMOKE_STATUS="$status" \
+  SMOKE_RC="$rc" \
+  SMOKE_RUN_DIR="$run_dir" \
+  SMOKE_MANIFEST="$manifest" \
+  python - <<'PY'
+import json, os, pathlib, time
+p = pathlib.Path(os.environ['SMOKE_JSON'])
+subjects = [s for s in os.environ.get('SMOKE_SUBJECTS_JOINED', '').splitlines() if s]
 if p.exists():
     obj = json.loads(p.read_text(encoding='utf-8'))
 else:
     obj = {
-        'job_id': '${SLURM_JOB_ID:-manual}',
-        'base_tofu_full_model': '$TOFU_FULL_MODEL_DIR',
-        'model_family': '$MODEL_FAMILY',
-        'subjects': ${SUBJECTS[@]+None},
+        'job_id': os.environ.get('SLURM_JOB_ID', 'manual'),
+        'base_tofu_full_model': os.environ.get('TOFU_FULL_MODEL_DIR'),
+        'model_family': os.environ.get('MODEL_FAMILY'),
+        'subjects': subjects,
         'methods': {}
     }
-obj['subjects'] = ${#SUBJECTS[@]} and [${SUBJECTS[@]/#/'"'}]
-obj['methods']['$label'] = {
-    'status': '$status',
-    'return_code': $rc,
-    'method': '$method',
-    'run_dir': '$run_dir',
-    'manifest': '$manifest',
+obj['subjects'] = subjects
+label = os.environ['SMOKE_LABEL']
+obj['methods'][label] = {
+    'status': os.environ['SMOKE_STATUS'],
+    'return_code': int(os.environ['SMOKE_RC']),
+    'method': os.environ['SMOKE_METHOD'],
+    'run_dir': os.environ['SMOKE_RUN_DIR'],
+    'manifest': os.environ.get('SMOKE_MANIFEST', ''),
     'updated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
 }
 p.parent.mkdir(parents=True, exist_ok=True)
 p.write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding='utf-8')
-print(json.dumps(obj['methods']['$label'], indent=2, ensure_ascii=False))
+print(json.dumps(obj['methods'][label], indent=2, ensure_ascii=False))
 PY
 }
 
