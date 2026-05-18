@@ -7,6 +7,7 @@ decorate with @METHOD_REGISTRY.register("name"), then add the import below.
 from methods.lunar import LUNARMethod       # noqa: F401
 from methods.reglu import ReGLUMethod       # noqa: F401
 from methods import reglu_patch             # noqa: F401  applies runtime-safe ReGLU patch
+from methods import reglu_expected_patch    # noqa: F401  allows KIF `expected` answer field
 
 # Future methods — add imports here when ready:
 # from methods.rmu   import RMUMethod        # noqa: F401
