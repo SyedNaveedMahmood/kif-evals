@@ -19,7 +19,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 import torch
@@ -85,10 +85,16 @@ class ProbabilityResult:
     token_count: int
 
 
-def _format_prompt(prompt: str, model_family: str = "llama3.1-8b") -> str:
+def _format_prompt(prompt: str, model_family: str = "llama2-7b-chat") -> str:
     mf = str(model_family).lower()
-    if "instruct" in mf or "chat" in mf:
+    if "llama2" in mf or "llama-2" in mf:
+        # SimNPO/Unlearn-Simple TOFU config: question_start_tag="[INST] ",
+        # question_end_tag=" [/INST]", answer_tag="".
+        return f"[INST] {prompt} [/INST]"
+    if "llama3" in mf and ("instruct" in mf or "chat" in mf):
         return f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+    if "instruct" in mf or "chat" in mf:
+        return f"{prompt}"
     return f"Question: {prompt}\nAnswer:"
 
 
@@ -98,7 +104,7 @@ def sequence_probability(
     prompt: str,
     answer: str,
     max_length: int = 512,
-    model_family: str = "llama3.1-8b",
+    model_family: str = "llama2-7b-chat",
     device: Optional[torch.device] = None,
 ) -> ProbabilityResult:
     prompt_text = _format_prompt(prompt, model_family)
@@ -137,7 +143,7 @@ def generate_answer(
     tokenizer,
     prompt: str,
     max_new_tokens: int = 64,
-    model_family: str = "llama3.1-8b",
+    model_family: str = "llama2-7b-chat",
     device: Optional[torch.device] = None,
 ) -> str:
     prompt_text = _format_prompt(prompt, model_family)
@@ -162,7 +168,7 @@ def eval_probability_rows(
     rows: List[Dict[str, Any]],
     answer_key: str = "answer",
     max_length: int = 512,
-    model_family: str = "llama3.1-8b",
+    model_family: str = "llama2-7b-chat",
 ) -> Dict[str, Any]:
     vals: Dict[str, Any] = {}
     probs: List[float] = []
@@ -180,7 +186,7 @@ def eval_rouge_rows(
     tokenizer,
     rows: List[Dict[str, Any]],
     max_new_tokens: int = 64,
-    model_family: str = "llama3.1-8b",
+    model_family: str = "llama2-7b-chat",
     max_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
     vals: Dict[str, Any] = {}
@@ -212,7 +218,7 @@ def eval_truth_ratio_rows(
     tokenizer,
     rows: List[Dict[str, Any]],
     max_length: int = 512,
-    model_family: str = "llama3.1-8b",
+    model_family: str = "llama2-7b-chat",
     aggregator: str = "closer_to_1_better",
 ) -> Dict[str, Any]:
     vals: Dict[str, Any] = {}
