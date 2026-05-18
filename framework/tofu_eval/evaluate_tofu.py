@@ -7,15 +7,22 @@ for TOFU-style reporting only.
 Examples:
   # Evaluate retain model once to create reference logs
   python framework/tofu_eval/evaluate_tofu.py \
-    --model_dir open-unlearning/tofu_Llama-3.1-8B_full \
+    --model_dir open-unlearning/tofu_Llama-3.1-8B_retain90 \
+    --data_dir framework/outputs/tofu/data \
+    --split forget10 \
+    --output_dir framework/outputs/tofu/retain_reference \
+    --write_retain_logs
+
+  # Evaluate an unlearned model against that retain reference
+  python framework/tofu_eval/evaluate_tofu.py \
+    --model_dir /path/to/unlearned/model \
     --data_dir framework/outputs/tofu/data \
     --split forget10 \
     --output_dir framework/outputs/tofu/eval/my_method \
-    --retain_logs framework/outputs/tofu/retain_reference/retain90_eval_logs.json
+    --retain_logs framework/outputs/tofu/retain_reference/retain_reference_logs.json
 
-If --retain_logs does not exist, pass --write_retain_logs to write the current
-model's forget truth-ratio logs as the retain reference. For real FQ, this must
-be done with a retain90 model, not the unlearned model.
+If --retain_logs does not exist, FQ is NaN. For real FQ, create retain logs with
+a retain90 model, not with the unlearned model.
 """
 
 from __future__ import annotations
@@ -23,24 +30,40 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
 
-from metrics import (
-    eval_probability_rows,
-    eval_rouge_rows,
-    eval_truth_ratio_rows,
-    forget_truth_ratio_score,
-    harmonic_mean,
-    ks_pvalue,
-    read_jsonl,
-    truth_ratio_nonforget_score,
-    values_from_metric,
-    write_json,
-)
+try:
+    from .metrics import (
+        eval_probability_rows,
+        eval_rouge_rows,
+        eval_truth_ratio_rows,
+        forget_truth_ratio_score,
+        harmonic_mean,
+        ks_pvalue,
+        read_jsonl,
+        truth_ratio_nonforget_score,
+        values_from_metric,
+        write_json,
+    )
+except ImportError:
+    sys.path.append(str(Path(__file__).resolve().parent))
+    from metrics import (  # type: ignore
+        eval_probability_rows,
+        eval_rouge_rows,
+        eval_truth_ratio_rows,
+        forget_truth_ratio_score,
+        harmonic_mean,
+        ks_pvalue,
+        read_jsonl,
+        truth_ratio_nonforget_score,
+        values_from_metric,
+        write_json,
+    )
 
 
 def _load_model(model_dir: str, torch_dtype: str, use_4bit: bool, device_map_auto: bool, attn_implementation: str):
@@ -195,7 +218,6 @@ def main() -> None:
     else:
         print("[WARN] No retain_logs provided/found. FQ will be NaN. Create retain reference first using --write_retain_logs on a retain90 model.")
 
-    # MU: harmonic mean over non-forget available metrics.
     mu_components: Dict[str, float] = {}
     for ds_name in ("retain", "real_authors", "world_facts"):
         ds = metrics.get(ds_name)
