@@ -1,40 +1,21 @@
 #!/usr/bin/env python3
-"""Evaluate a model on TOFU forget10 with linear FQ and MU.
+"""Evaluate a model on TOFU forget10 with SimNPO/KIF-style linear FQ and MU.
 
-This evaluator is standalone and does not run the KIF SMR/EL10 Module 8. It is
-for TOFU-style reporting only.
-
-Examples:
-  # Evaluate retain model once to create reference logs
-  python framework/tofu_eval/evaluate_tofu.py \
-    --model_dir open-unlearning/tofu_Llama-3.1-8B_retain90 \
-    --data_dir framework/outputs/tofu/data \
-    --split forget10 \
-    --output_dir framework/outputs/tofu/retain_reference \
-    --write_retain_logs
-
-  # Evaluate an unlearned model against that retain reference
-  python framework/tofu_eval/evaluate_tofu.py \
-    --model_dir /path/to/unlearned/model \
-    --data_dir framework/outputs/tofu/data \
-    --split forget10 \
-    --output_dir framework/outputs/tofu/eval/my_method \
-    --retain_logs framework/outputs/tofu/retain_reference/retain_reference_logs.json
-
-If --retain_logs does not exist, FQ is NaN. For real FQ, create retain logs with
-a retain90 model, not with the unlearned model.
+This evaluator is standalone and does not run the KIF SMR/EL10 Module 8.
+Reporting follows the TOFU/SimNPO convention used in KIF discussions:
+  - Forget Quality / FQ = linear KS-test p-value, not log(p-value)
+  - Model Utility / MU = harmonic mean over non-forget utility metrics
+  - Truth Ratio = wrong/correct using official TOFU perturbed datasets
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import numpy as np
 import torch
 
 try:
@@ -44,7 +25,7 @@ try:
         eval_truth_ratio_rows,
         forget_truth_ratio_score,
         harmonic_mean,
-        ks_pvalue,
+        ks_test,
         read_jsonl,
         truth_ratio_nonforget_score,
         values_from_metric,
@@ -58,7 +39,7 @@ except ImportError:
         eval_truth_ratio_rows,
         forget_truth_ratio_score,
         harmonic_mean,
-        ks_pvalue,
+        ks_test,
         read_jsonl,
         truth_ratio_nonforget_score,
         values_from_metric,
@@ -121,11 +102,22 @@ def _maybe_rows(path: Path) -> Optional[List[Dict[str, Any]]]:
     return None
 
 
+def _tr_aggregator_for_dataset(name: str) -> str:
+    return "closer_to_1_better" if name == "forget" else "true_better"
+
+
 def _compute_dataset_metrics(model, tokenizer, name: str, rows: List[Dict[str, Any]], args) -> Dict[str, Any]:
     print(f"[eval] {name}: probability")
     prob = eval_probability_rows(model, tokenizer, rows, max_length=args.max_length, model_family=args.model_family)
     print(f"[eval] {name}: truth_ratio")
-    tr = eval_truth_ratio_rows(model, tokenizer, rows, max_length=args.max_length, model_family=args.model_family)
+    tr = eval_truth_ratio_rows(
+        model,
+        tokenizer,
+        rows,
+        max_length=args.max_length,
+        model_family=args.model_family,
+        aggregator=_tr_aggregator_for_dataset(name),
+    )
     rouge = None
     if not args.skip_rouge:
         print(f"[eval] {name}: ROUGE-L recall")
@@ -207,14 +199,15 @@ def main() -> None:
         write_json(out / "retain_reference_logs.json", retain_obj)
         print(f"[write] retain reference logs -> {out / 'retain_reference_logs.json'}")
 
-    fq = float("nan")
+    ks = {"statistic": float("nan"), "pvalue": float("nan")}
     if retain_reference is not None:
         if "truth_ratio_values" in retain_reference:
             ref_vals = retain_reference["truth_ratio_values"]
         else:
             ref_metric = retain_reference.get("forget_truth_ratio") or retain_reference.get("metrics", {}).get("forget", {}).get("truth_ratio")
             ref_vals = values_from_metric(ref_metric, "score") if ref_metric else []
-        fq = ks_pvalue(current_forget_tr, ref_vals)
+        # SimNPO/KIF reporting uses the direct linear KS p-value on raw truth ratios.
+        ks = ks_test(current_forget_tr, ref_vals, inverse=False)
     else:
         print("[WARN] No retain_logs provided/found. FQ will be NaN. Create retain reference first using --write_retain_logs on a retain90 model.")
 
@@ -235,15 +228,19 @@ def main() -> None:
         "model_dir": args.model_dir,
         "split": args.split,
         "retain_split": retain_split,
-        "forget_quality_linear_FQ": fq,
+        "Forget Quality": ks["pvalue"],
+        "KS Test PVal Forget": ks["pvalue"],
+        "KS Test Forget": ks["statistic"],
+        "Model Utility": mu,
+        "forget_quality_linear_FQ": ks["pvalue"],
         "model_utility_MU": mu,
-        "forget_truth_ratio_mean": float(metrics["forget"]["truth_ratio"]["agg_value"]),
+        "forget_truth_ratio_mean_raw": float(metrics["forget"]["truth_ratio"].get("raw_mean", float("nan"))),
         "forget_truth_ratio_closer_to_1_score": forget_tr_score,
         "forget_probability": float(metrics["forget"]["probability"]["agg_value"]),
         "forget_rougeL_recall": None if metrics["forget"].get("rougeL_recall") is None else float(metrics["forget"]["rougeL_recall"]["agg_value"]),
         "mu_components": mu_components,
         "fq_reference_logs": args.retain_logs,
-        "linear_fq_note": "FQ is the KS-test p-value in [0,1], not log10(p-value).",
+        "reporting_convention": "SimNPO/KIF-style linear FQ = KS-test p-value, no log transform",
     }
     write_json(out / "tofu_summary.json", summary)
     print(json.dumps(summary, indent=2, ensure_ascii=False))
