@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=8
 #SBATCH --mem=80G
-#SBATCH --time=00:40:00
+#SBATCH --time=00:30:00
 #SBATCH --chdir=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src
 #SBATCH --output=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/logs/reglu-smoke-%j.out
 #SBATCH --error=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/logs/reglu-smoke-%j.err
