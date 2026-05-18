@@ -9,9 +9,11 @@ faithful artifact is the merged model saved after training.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 from torch.utils.data import DataLoader
@@ -23,6 +25,103 @@ logger = logging.getLogger(__name__)
 # Explicit model-family aliases for base Llama-3.1-8B. Both use no chat template.
 reglu._CHAT_TEMPLATES["llama3.1-8b"] = "{instruction}"
 reglu._CHAT_TEMPLATES["llama3-8b"] = "{instruction}"
+
+_SUBJECT_KEYS = ("subject", "author", "entity", "name", "target_subject", "person")
+_PROMPT_KEYS = ("prompt", "question", "instruction", "query", "input", "text")
+_RESPONSE_KEYS = ("response", "answer", "completion", "output", "target", "label")
+
+
+def _norm_subject(x: object) -> str:
+    s = str(x or "").lower().strip()
+    s = re.sub(r"\([^)]*\)", "", s)
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    return s
+
+
+def _first_present(rec: Dict, keys: Tuple[str, ...]) -> str:
+    for key in keys:
+        val = rec.get(key)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    return ""
+
+
+def _load_kif_rows_flexible(prompts_jsonl: str) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    path = Path(prompts_jsonl)
+    for ln, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except Exception as exc:
+            logger.warning("[ReGLU] Skipping invalid JSONL line %d in %s: %s", ln, path, exc)
+            continue
+        subject = _first_present(rec, _SUBJECT_KEYS)
+        prompt = _first_present(rec, _PROMPT_KEYS)
+        response = _first_present(rec, _RESPONSE_KEYS)
+        if subject and prompt and response:
+            rows.append({"subject": subject, "prompt": prompt, "response": response})
+    return rows
+
+
+def _select_subject_rows(rows: List[Dict[str, str]], subjects: List[str], max_per_subject: int) -> List[Dict[str, str]]:
+    requested = {_norm_subject(s) for s in subjects}
+    out: List[Dict[str, str]] = []
+    counts: Dict[str, int] = {}
+    for row in rows:
+        key = _norm_subject(row["subject"])
+        if key not in requested:
+            continue
+        if counts.get(key, 0) >= max_per_subject:
+            continue
+        out.append(row)
+        counts[key] = counts.get(key, 0) + 1
+    return out
+
+
+def _build_rows_flexible(self, prompts_jsonl: str, forget_subjects: List[str]):
+    rows = _load_kif_rows_flexible(prompts_jsonl)
+    if not rows:
+        raise ValueError(
+            "[ReGLU] No usable rows found in prompts_jsonl. Expected one subject field, "
+            "one prompt/question field, and one response/answer field."
+        )
+
+    discovered_subjects: List[str] = []
+    seen = set()
+    for row in rows:
+        if row["subject"] not in seen:
+            seen.add(row["subject"])
+            discovered_subjects.append(row["subject"])
+
+    forget_rows = _select_subject_rows(rows, forget_subjects, int(self.cfg.max_per_subject))[: int(self.cfg.n_forget)]
+    if not forget_rows:
+        raise ValueError(
+            "[ReGLU] No forget rows found after flexible schema parsing. "
+            f"Requested forget subjects={forget_subjects}. "
+            f"Available subjects sample={discovered_subjects[:30]}"
+        )
+
+    forget_keys = {_norm_subject(s) for s in forget_subjects}
+    if self.cfg.retain_subjects is not None:
+        retain_source = list(self.cfg.retain_subjects)
+        retain_pool = _select_subject_rows(rows, retain_source, int(self.cfg.max_per_subject))
+    else:
+        retain_source = [s for s in discovered_subjects if _norm_subject(s) not in forget_keys]
+        retain_pool = [row for row in rows if _norm_subject(row["subject"]) not in forget_keys]
+
+    if not retain_pool:
+        retain_source = ["__unverifiable_retain__"]
+        retain_pool = [dict(x, subject="__unverifiable_retain__") for x in reglu.UNVERIFIABLE_PROMPTS]
+        logger.warning("[ReGLU] No retain subjects found in prompts_jsonl; using unverifiable retain fallback.")
+
+    retain_rows = reglu._repeat_to_len(retain_pool, int(self.cfg.n_retain))
+    logger.info("[ReGLU] Flexible loader read %d usable rows from %s", len(rows), prompts_jsonl)
+    logger.info("[ReGLU] Available subjects sample: %s", discovered_subjects[:20])
+    logger.info("[ReGLU] Forget rows=%d requested_subjects=%s", len(forget_rows), forget_subjects)
+    logger.info("[ReGLU] Retain rows=%d retain_subjects=%s", len(retain_rows), retain_source[:20])
+    return forget_rows, retain_rows, retain_source
 
 
 def _collect_representations_sum_pool(
@@ -180,6 +279,7 @@ def _reglu_init_with_merged_default(self, config_overrides=None):
 
 
 # Monkey-patch the implementation used by ReGLUMethod.run().
+reglu.ReGLUMethod._build_rows = _build_rows_flexible
 reglu._collect_representations_for_modules = _collect_representations_sum_pool
 reglu._apply_rila_initialization = _apply_rila_initialization_no_w_cache
 reglu.ReGLUMethod.__init__ = _reglu_init_with_merged_default
