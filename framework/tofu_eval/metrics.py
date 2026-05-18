@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """TOFU FQ/MU metric utilities.
 
-This is intentionally lightweight and standalone. It mirrors the original TOFU
-metric definitions and OpenUnlearning's metric flow:
-  - probability = exp(-average answer NLL)
-  - truth ratio = mean P(false | q) / P(paraphrased_true | q)
-  - forget quality = KS-test p-value comparing unlearned vs retain-model TR
-  - model utility = harmonic mean over non-forget probability/ROUGE/TR scores
-
-The evaluator reports linear FQ in [0, 1], not log10(p-value).
+Faithfulness target:
+- OpenUnlearning/TOFU probability: exp(-average answer NLL)
+- Original TOFU truth ratio: P(wrong | q) / P(correct | q), where for
+  multi-perturbation answers we first average perturbation *losses* and then
+  exponentiate, matching SimNPO/TOFU code paths.
+- Forget-set truth-ratio aggregate: mean(min(TR, 1/TR)) = closer_to_1_better.
+- Non-forget truth-ratio aggregate: mean(max(0, 1 - TR)) = true_better.
+- SimNPO/KIF-style Forget Quality: linear KS-test p-value on raw TR arrays,
+  not log p-value. We also expose the KS statistic.
 """
 
 from __future__ import annotations
@@ -51,21 +52,20 @@ def harmonic_mean(vals: Iterable[float], eps: float = 1e-12) -> float:
 
 
 def simple_rouge_l_recall(pred: str, target: str) -> float:
-    """Dependency-free ROUGE-L recall.
+    """Dependency-free ROUGE-L recall fallback.
 
-    TOFU paper uses ROUGE-L recall. We avoid requiring rouge-score to make this
-    evaluator work in the existing cluster env.
+    OpenUnlearning uses rouge_score.RougeScorer with ROUGE-L recall. To keep the
+    cluster environment light, this computes the same LCS-recall quantity without
+    stemming. The output key is still rougeL_recall, and generation text is saved
+    for audit.
     """
     def toks(s: str) -> List[str]:
         return re.findall(r"\w+|[^\w\s]", str(s).lower(), flags=re.UNICODE)
 
     a = toks(pred)
     b = toks(target)
-    if not b:
+    if not b or not a:
         return 0.0
-    if not a:
-        return 0.0
-    # LCS dynamic programming, memory O(len(b)).
     prev = [0] * (len(b) + 1)
     for x in a:
         cur = [0]
@@ -86,9 +86,8 @@ class ProbabilityResult:
 
 
 def _format_prompt(prompt: str, model_family: str = "llama3.1-8b") -> str:
-    # For base-model TOFU/KIF comparisons, no chat template.
-    # Use question/answer boundary consistent with method inputs.
-    if "instruct" in str(model_family).lower():
+    mf = str(model_family).lower()
+    if "instruct" in mf or "chat" in mf:
         return f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
     return f"Question: {prompt}\nAnswer:"
 
@@ -117,8 +116,7 @@ def sequence_probability(
     prompt_len = min(pref["input_ids"].shape[1], labels.shape[1])
     labels[:, :prompt_len] = -100
     labels[attention_mask == 0] = -100
-    valid = labels.ne(-100)
-    token_count = int(valid.sum().item())
+    token_count = int(labels.ne(-100).sum().item())
     if token_count <= 0:
         return ProbabilityResult(prob=0.0, avg_loss=float("inf"), token_count=0)
 
@@ -127,8 +125,9 @@ def sequence_probability(
         logits = out.logits[:, :-1, :].contiguous()
         shift_labels = labels[:, 1:].contiguous()
         loss = F.cross_entropy(logits.transpose(1, 2), shift_labels, ignore_index=-100, reduction="none")
-        mask = shift_labels.ne(-100)
-        avg_loss = float((loss * mask).sum().detach().float().cpu().item() / max(1, int(mask.sum().item())))
+        # Match OpenUnlearning evaluate_probability: sum shifted-token losses,
+        # normalize by number of supervised target labels.
+        avg_loss = float(loss.sum().detach().float().cpu().item() / max(1, token_count))
     prob = float(math.exp(-avg_loss)) if math.isfinite(avg_loss) else 0.0
     return ProbabilityResult(prob=prob, avg_loss=avg_loss, token_count=token_count)
 
@@ -165,8 +164,8 @@ def eval_probability_rows(
     max_length: int = 512,
     model_family: str = "llama3.1-8b",
 ) -> Dict[str, Any]:
-    vals = {}
-    probs = []
+    vals: Dict[str, Any] = {}
+    probs: List[float] = []
     for i, row in enumerate(rows):
         ans = row.get(answer_key) or row.get("answer") or row.get("response")
         res = sequence_probability(model, tokenizer, row["prompt"], str(ans), max_length=max_length, model_family=model_family)
@@ -184,8 +183,8 @@ def eval_rouge_rows(
     model_family: str = "llama3.1-8b",
     max_rows: Optional[int] = None,
 ) -> Dict[str, Any]:
-    vals = {}
-    scores = []
+    vals: Dict[str, Any] = {}
+    scores: List[float] = []
     use_rows = rows[:max_rows] if max_rows else rows
     for i, row in enumerate(use_rows):
         pred = generate_answer(model, tokenizer, row["prompt"], max_new_tokens=max_new_tokens, model_family=model_family)
@@ -196,15 +195,28 @@ def eval_rouge_rows(
     return {"agg_value": float(np.mean(scores)) if scores else float("nan"), "value_by_index": vals}
 
 
+def _tr_aggregate(vals: np.ndarray, aggregator: str) -> float:
+    if vals.size == 0:
+        return float("nan")
+    if aggregator == "closer_to_1_better":
+        return float(np.mean(np.minimum(vals, 1.0 / (vals + 1e-10))))
+    if aggregator == "true_better":
+        return float(np.mean(np.maximum(0.0, 1.0 - vals)))
+    if aggregator == "raw_mean":
+        return float(np.mean(vals))
+    raise ValueError(f"Invalid truth-ratio aggregator: {aggregator}")
+
+
 def eval_truth_ratio_rows(
     model,
     tokenizer,
     rows: List[Dict[str, Any]],
     max_length: int = 512,
     model_family: str = "llama3.1-8b",
+    aggregator: str = "closer_to_1_better",
 ) -> Dict[str, Any]:
-    vals = {}
-    scores = []
+    vals: Dict[str, Any] = {}
+    scores: List[float] = []
     for i, row in enumerate(rows):
         true_ans = str(row.get("paraphrased_answer") or row.get("answer") or row.get("response") or "")
         wrongs = row.get("perturbed_answers") or row.get("wrong_answers") or []
@@ -212,47 +224,60 @@ def eval_truth_ratio_rows(
             wrongs = [wrongs]
         wrongs = [str(x) for x in wrongs if str(x).strip()]
         if not wrongs:
-            wrongs = ["I do not know the answer."]
+            raise ValueError(f"Missing perturbed answers for TOFU row {i}; refusing approximate Truth Ratio.")
+
         true_res = sequence_probability(model, tokenizer, row["prompt"], true_ans, max_length=max_length, model_family=model_family)
-        false_probs = []
-        false_losses = []
+        false_losses: List[float] = []
         for wrong in wrongs:
             wrong_res = sequence_probability(model, tokenizer, row["prompt"], wrong, max_length=max_length, model_family=model_family)
-            false_probs.append(wrong_res.prob)
             false_losses.append(wrong_res.avg_loss)
-        false_prob = float(np.mean(false_probs)) if false_probs else 0.0
+
+        # Match SimNPO/TOFU: average perturbation losses first, then convert to
+        # probability ratio exp(-(wrong_loss_mean)) / exp(-(true_loss)).
+        false_avg_loss_mean = float(np.mean(false_losses))
+        false_prob = float(math.exp(-false_avg_loss_mean)) if math.isfinite(false_avg_loss_mean) else 0.0
         tr = float(false_prob / (true_res.prob + 1e-10))
         vals[str(i)] = {
             "score": tr,
             "true_prob": true_res.prob,
-            "false_prob_mean": false_prob,
+            "false_prob": false_prob,
             "true_avg_loss": true_res.avg_loss,
-            "false_avg_loss_mean": float(np.mean(false_losses)) if false_losses else float("nan"),
+            "false_avg_loss_mean": false_avg_loss_mean,
+            "num_perturbations": len(wrongs),
         }
         scores.append(tr)
-    return {"agg_value": float(np.mean(scores)) if scores else float("nan"), "value_by_index": vals}
+    arr = np.asarray(scores, dtype=float)
+    return {"agg_value": _tr_aggregate(arr, aggregator), "raw_mean": float(np.mean(arr)) if scores else float("nan"), "aggregator": aggregator, "value_by_index": vals}
 
 
-def ks_pvalue(a: Iterable[float], b: Iterable[float]) -> float:
+def ks_test(a: Iterable[float], b: Iterable[float], inverse: bool = False) -> Dict[str, float]:
     aa = np.asarray([float(x) for x in a if x is not None and np.isfinite(float(x))], dtype=float)
     bb = np.asarray([float(x) for x in b if x is not None and np.isfinite(float(x))], dtype=float)
+    if inverse:
+        aa = 1.0 / (aa + 1e-10)
+        bb = 1.0 / (bb + 1e-10)
     if len(aa) == 0 or len(bb) == 0:
-        return float("nan")
+        return {"statistic": float("nan"), "pvalue": float("nan")}
     try:
         from scipy.stats import ks_2samp
-        return float(ks_2samp(aa, bb).pvalue)
+        res = ks_2samp(aa, bb)
+        return {"statistic": float(res.statistic), "pvalue": float(res.pvalue)}
     except Exception:
-        # Lightweight fallback: asymptotic two-sample KS p-value approximation.
         data_all = np.sort(np.concatenate([aa, bb]))
         cdf_a = np.searchsorted(np.sort(aa), data_all, side="right") / len(aa)
         cdf_b = np.searchsorted(np.sort(bb), data_all, side="right") / len(bb)
         d = float(np.max(np.abs(cdf_a - cdf_b)))
         en = math.sqrt(len(aa) * len(bb) / (len(aa) + len(bb)))
-        return float(min(1.0, max(0.0, 2.0 * math.exp(-2.0 * (en * d) ** 2))))
+        p = float(min(1.0, max(0.0, 2.0 * math.exp(-2.0 * (en * d) ** 2))))
+        return {"statistic": d, "pvalue": p}
+
+
+def ks_pvalue(a: Iterable[float], b: Iterable[float]) -> float:
+    return ks_test(a, b, inverse=False)["pvalue"]
 
 
 def values_from_metric(metric: Dict[str, Any], key: str = "score") -> List[float]:
-    vals = []
+    vals: List[float] = []
     for v in metric.get("value_by_index", {}).values():
         if isinstance(v, dict) and key in v:
             vals.append(float(v[key]))
@@ -261,13 +286,9 @@ def values_from_metric(metric: Dict[str, Any], key: str = "score") -> List[float
 
 def truth_ratio_nonforget_score(tr_metric: Dict[str, Any]) -> float:
     vals = np.asarray(values_from_metric(tr_metric, "score"), dtype=float)
-    if vals.size == 0:
-        return float("nan")
-    return float(np.mean(np.maximum(0.0, 1.0 - vals)))
+    return _tr_aggregate(vals, "true_better")
 
 
 def forget_truth_ratio_score(tr_metric: Dict[str, Any]) -> float:
     vals = np.asarray(values_from_metric(tr_metric, "score"), dtype=float)
-    if vals.size == 0:
-        return float("nan")
-    return float(np.mean(np.minimum(vals, 1.0 / (vals + 1e-10))))
+    return _tr_aggregate(vals, "closer_to_1_better")
