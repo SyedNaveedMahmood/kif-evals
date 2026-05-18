@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """
-Prepare TOFU forget10 data for method training and FQ/MU evaluation.
+Prepare TOFU forget10 data with OpenUnlearning/TOFU-faithful split semantics.
 
-Outputs a local, stable JSONL layout under framework/outputs/tofu by default:
+This script is intentionally strict. It does NOT fabricate perturbations or use
+other answers as false-answer fallbacks. For faithful FQ/MU, TOFU requires the
+official perturbed configurations:
+  - forget10_perturbed for forget paraphrased/perturbed answers
+  - retain_perturbed for retain truth-ratio answers
+  - real_authors_perturbed and world_facts_perturbed for MU components
+
+OpenUnlearning evaluates TOFU with HF dataset configs, not split names:
+  load_dataset("locuslab/TOFU", name="forget10", split="train")
+  load_dataset("locuslab/TOFU", name="forget10_perturbed", split="train")
+
+Outputs under framework/outputs/tofu by default:
   data/forget10.jsonl
   data/retain90.jsonl
-  data/real_authors.jsonl          if available in locuslab/TOFU
-  data/world_facts.jsonl           if available in locuslab/TOFU
-  data/forget10_paraphrased.jsonl  if available
-  data/forget10_perturbed.jsonl    if available
+  data/real_authors.jsonl
+  data/world_facts.jsonl
   method_inputs/full_forget10_retain90.jsonl
   subjects/forget10_subjects.txt
-
-The method input JSONL uses the same {subject,prompt,response} schema as the
-existing KIF method plugins, so LUNAR/ReGLU/OPT-OUT/SimNPO can reuse their
-loaders on TOFU without changing their core code.
 """
 
 from __future__ import annotations
@@ -24,53 +29,38 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
-def _norm_subject(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(text).lower()).strip()
+QUESTION_KEYS = ("question", "prompt", "query", "instruction")
+ANSWER_KEYS = ("answer", "response", "completion", "output", "target")
+PARA_KEYS = ("paraphrased_answer", "paraphrase", "paraphrased", "answer_paraphrased")
+PERT_KEYS = ("perturbed_answer", "perturbed_answers", "perturbation", "perturbations", "wrong_answers", "incorrect_answers")
+SUBJECT_KEYS = ("subject", "author", "name", "person", "target_subject")
 
 
-def _extract_subject(row: Dict[str, Any]) -> str:
-    for key in ("subject", "author", "name", "person", "target_subject"):
-        if row.get(key):
-            return str(row[key]).strip()
-    q = str(row.get("question") or row.get("prompt") or "")
-    # TOFU questions are generated so the full author name appears in the question.
-    # Common patterns include "What ... <Name> ...?". If no explicit author field is
-    # present, use the first title-like bigram/trigram as a conservative fallback.
-    m = re.search(r"(?:about|for|by|of|does|did|is|was|has|had|will|would)\s+([A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+){1,3})", q)
-    if m:
-        return m.group(1).strip()
-    caps = re.findall(r"\b[A-Z][A-Za-z'\-]+\b", q)
-    if len(caps) >= 2:
-        return " ".join(caps[:2])
-    return "__unknown_author__"
-
-
-def _prompt(row: Dict[str, Any]) -> str:
-    for key in ("question", "prompt", "query", "instruction"):
-        if row.get(key):
-            return str(row[key]).strip()
+def _first(row: Dict[str, Any], keys: Iterable[str]) -> str:
+    for key in keys:
+        val = row.get(key)
+        if val is not None and str(val).strip():
+            return str(val).strip()
     return ""
+
+
+def _question(row: Dict[str, Any]) -> str:
+    return _first(row, QUESTION_KEYS)
 
 
 def _answer(row: Dict[str, Any]) -> str:
-    for key in ("answer", "response", "completion", "output", "target"):
-        if row.get(key):
-            return str(row[key]).strip()
-    return ""
+    return _first(row, ANSWER_KEYS)
 
 
-def _paraphrased_answer(row: Dict[str, Any]) -> str:
-    for key in ("paraphrased_answer", "paraphrase", "paraphrased", "answer_paraphrased"):
-        if row.get(key):
-            return str(row[key]).strip()
-    return _answer(row)
+def _paraphrased(row: Dict[str, Any]) -> str:
+    return _first(row, PARA_KEYS)
 
 
-def _perturbed_answers(row: Dict[str, Any]) -> List[str]:
-    for key in ("perturbed_answer", "perturbed_answers", "perturbation", "perturbations", "wrong_answers", "incorrect_answers"):
+def _perturbed(row: Dict[str, Any]) -> List[str]:
+    for key in PERT_KEYS:
         val = row.get(key)
         if val is None:
             continue
@@ -79,7 +69,6 @@ def _perturbed_answers(row: Dict[str, Any]) -> List[str]:
             if out:
                 return out
         if isinstance(val, str) and val.strip():
-            # Some dataset variants store a JSON-like list string; try JSON first.
             try:
                 parsed = json.loads(val)
                 if isinstance(parsed, list):
@@ -92,45 +81,25 @@ def _perturbed_answers(row: Dict[str, Any]) -> List[str]:
     return []
 
 
-def _to_basic_row(row: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    p = _prompt(row)
-    a = _answer(row)
-    if not p or not a:
-        return None
-    return {"subject": _extract_subject(row), "prompt": p, "response": a}
+def _subject(row: Dict[str, Any], prefix: str, idx: int) -> str:
+    explicit = _first(row, SUBJECT_KEYS)
+    if explicit:
+        return explicit
+    # TOFU consists of 20 QA pairs per synthetic author profile. When the public
+    # row lacks an explicit author field, this deterministic grouping preserves
+    # author-level forget/retain grouping without fragile name extraction.
+    return f"{prefix}_author_{idx // 20:04d}"
 
 
-def _to_eval_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    p = _prompt(row)
-    a = _answer(row)
-    if not p or not a:
-        return None
-    return {
-        "subject": _extract_subject(row),
-        "prompt": p,
-        "answer": a,
-        "paraphrased_answer": _paraphrased_answer(row),
-        "perturbed_answers": _perturbed_answers(row),
-        "raw": row,
-    }
-
-
-def _load_hf_split(dataset_name: str, split: str) -> List[Dict[str, Any]]:
+def _load_config(dataset: str, name: str) -> List[Dict[str, Any]]:
     from datasets import load_dataset
 
-    ds = load_dataset(dataset_name, split=split)
-    return [dict(x) for x in ds]
-
-
-def _try_load(dataset_name: str, split_names: Iterable[str]) -> Optional[List[Dict[str, Any]]]:
-    for split in split_names:
-        try:
-            rows = _load_hf_split(dataset_name, split)
-            print(f"[OK] loaded {dataset_name}:{split} rows={len(rows)}")
-            return rows
-        except Exception as exc:
-            print(f"[skip] {dataset_name}:{split}: {exc}")
-    return None
+    ds = load_dataset(dataset, name=name, split="train")
+    rows = [dict(x) for x in ds]
+    if not rows:
+        raise RuntimeError(f"Loaded empty TOFU config: {dataset}:{name}")
+    print(f"[OK] loaded {dataset} name={name!r} split='train' rows={len(rows)} keys={sorted(rows[0].keys())}")
+    return rows
 
 
 def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
@@ -144,31 +113,88 @@ def _write_jsonl(path: Path, rows: Iterable[Dict[str, Any]]) -> int:
     return n
 
 
-def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
-    out = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                out.append(json.loads(line))
+def _merge_standard_and_perturbed(
+    standard_rows: List[Dict[str, Any]],
+    perturbed_rows: List[Dict[str, Any]],
+    subject_prefix: str,
+    require_same_length: bool = True,
+) -> List[Dict[str, Any]]:
+    if require_same_length and len(standard_rows) != len(perturbed_rows):
+        raise RuntimeError(
+            f"Standard/perturbed row-count mismatch for {subject_prefix}: "
+            f"standard={len(standard_rows)} perturbed={len(perturbed_rows)}"
+        )
+
+    merged: List[Dict[str, Any]] = []
+    for i, std in enumerate(standard_rows):
+        pert = perturbed_rows[i] if i < len(perturbed_rows) else std
+        q = _question(std) or _question(pert)
+        ans = _answer(std) or _answer(pert)
+        para = _paraphrased(pert)
+        perts = _perturbed(pert)
+
+        if not q or not ans:
+            raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: std_keys={std.keys()} pert_keys={pert.keys()}")
+        if not para:
+            raise RuntimeError(
+                f"Missing paraphrased_answer at {subject_prefix} row {i}. "
+                "Faithful TOFU FQ/MU requires the official *_perturbed configs."
+            )
+        if not perts:
+            raise RuntimeError(
+                f"Missing perturbed_answer at {subject_prefix} row {i}. "
+                "Faithful TOFU FQ/MU requires the official *_perturbed configs."
+            )
+
+        q_pert = _question(pert)
+        if q_pert and q_pert.strip() != q.strip():
+            print(f"[warn] question mismatch at {subject_prefix} row {i}; using standard question")
+
+        merged.append(
+            {
+                "subject": _subject(std, subject_prefix, i),
+                "prompt": q,
+                "answer": ans,
+                "response": ans,
+                "paraphrased_answer": para,
+                "perturbed_answers": perts,
+                "tofu_index": i,
+                "tofu_subject_id": _subject(std, subject_prefix, i),
+                "source": subject_prefix,
+            }
+        )
+    return merged
+
+
+def _from_perturbed_only(rows: List[Dict[str, Any]], subject_prefix: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for i, row in enumerate(rows):
+        q = _question(row)
+        ans = _answer(row)
+        para = _paraphrased(row) or ans
+        perts = _perturbed(row)
+        if not q or not ans:
+            raise RuntimeError(f"Missing question/answer at {subject_prefix} row {i}: keys={row.keys()}")
+        if not perts:
+            raise RuntimeError(f"Missing perturbed_answer at {subject_prefix} row {i}; cannot compute Truth Ratio faithfully")
+        out.append(
+            {
+                "subject": _subject(row, subject_prefix, i),
+                "prompt": q,
+                "answer": ans,
+                "response": ans,
+                "paraphrased_answer": para,
+                "perturbed_answers": perts,
+                "tofu_index": i,
+                "tofu_subject_id": _subject(row, subject_prefix, i),
+                "source": subject_prefix,
+            }
+        )
     return out
 
 
-def _ensure_perturbations(eval_rows: List[Dict[str, Any]], donor_rows: List[Dict[str, Any]], k: int = 5) -> List[Dict[str, Any]]:
-    # Faithful path: use dataset-provided perturbations. Fallback only if the HF split lacks them.
-    donor_answers = [str(r.get("answer") or r.get("response") or "").strip() for r in donor_rows]
-    donor_answers = [a for a in donor_answers if a]
-    for i, row in enumerate(eval_rows):
-        if row.get("perturbed_answers"):
-            continue
-        own = row.get("answer", "")
-        wrong = [a for a in donor_answers if a and a != own]
-        if not wrong:
-            wrong = ["I do not know the answer."]
-        start = (i * k) % len(wrong)
-        vals = [wrong[(start + j) % len(wrong)] for j in range(min(k, len(wrong)))]
-        row["perturbed_answers"] = vals
-        row["perturbation_source"] = "fallback_other_tofu_answers"
-    return eval_rows
+def _method_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    return [{"subject": r["subject"], "prompt": r["prompt"], "response": r["answer"]} for r in rows]
 
 
 def main() -> None:
@@ -178,6 +204,9 @@ def main() -> None:
     ap.add_argument("--split", default="forget10", choices=["forget01", "forget05", "forget10"])
     args = ap.parse_args()
 
+    retain_split = {"forget01": "retain99", "forget05": "retain95", "forget10": "retain90"}[args.split]
+    holdout_split = {"forget01": "holdout01", "forget05": "holdout05", "forget10": "holdout10"}[args.split]
+
     out = Path(args.out_dir)
     data_dir = out / "data"
     method_dir = out / "method_inputs"
@@ -186,62 +215,70 @@ def main() -> None:
     method_dir.mkdir(parents=True, exist_ok=True)
     subj_dir.mkdir(parents=True, exist_ok=True)
 
-    retain_split = {"forget01": "retain99", "forget05": "retain95", "forget10": "retain90"}[args.split]
+    # OpenUnlearning-faithful HF configs.
+    forget_std = _load_config(args.dataset, args.split)
+    retain_std = _load_config(args.dataset, retain_split)
+    forget_pert = _load_config(args.dataset, f"{args.split}_perturbed")
+    retain_pert = _load_config(args.dataset, "retain_perturbed")
+    real_pert = _load_config(args.dataset, "real_authors_perturbed")
+    world_pert = _load_config(args.dataset, "world_facts_perturbed")
 
-    forget_raw = _try_load(args.dataset, [args.split])
-    retain_raw = _try_load(args.dataset, [retain_split])
-    if forget_raw is None or retain_raw is None:
-        raise SystemExit(f"Could not load required TOFU splits: {args.split}, {retain_split}")
+    # Holdout is not part of FQ/MU, but we save it for completeness/repro checks.
+    holdout_std = _load_config(args.dataset, holdout_split)
 
-    # Optional evaluation splits have slightly different names across TOFU/OpenUnlearning versions.
-    real_raw = _try_load(args.dataset, ["real_authors", "real_author", "real_authors_perturbed", "real_authors_qa"])
-    world_raw = _try_load(args.dataset, ["world_facts", "world_fact", "world_facts_perturbed", "world_facts_qa"])
+    forget_rows = _merge_standard_and_perturbed(forget_std, forget_pert, args.split)
+    retain_rows = _merge_standard_and_perturbed(retain_std, retain_pert, retain_split)
+    real_rows = _from_perturbed_only(real_pert, "real_authors")
+    world_rows = _from_perturbed_only(world_pert, "world_facts")
+    holdout_rows = _from_perturbed_only(holdout_std, holdout_split) if "perturbed_answer" in holdout_std[0] else [
+        {
+            "subject": _subject(r, holdout_split, i),
+            "prompt": _question(r),
+            "answer": _answer(r),
+            "response": _answer(r),
+            "tofu_index": i,
+            "source": holdout_split,
+        }
+        for i, r in enumerate(holdout_std)
+    ]
 
-    forget_eval = [_to_eval_row(r) for r in forget_raw]
-    retain_eval = [_to_eval_row(r) for r in retain_raw]
-    forget_eval = [r for r in forget_eval if r is not None]
-    retain_eval = [r for r in retain_eval if r is not None]
-    forget_eval = _ensure_perturbations(forget_eval, retain_eval, k=5)
-    retain_eval = _ensure_perturbations(retain_eval, forget_eval, k=5)
+    _write_jsonl(data_dir / f"{args.split}.jsonl", forget_rows)
+    _write_jsonl(data_dir / f"{retain_split}.jsonl", retain_rows)
+    _write_jsonl(data_dir / "real_authors.jsonl", real_rows)
+    _write_jsonl(data_dir / "world_facts.jsonl", world_rows)
+    _write_jsonl(data_dir / f"{holdout_split}.jsonl", holdout_rows)
 
-    forget_basic = [{"subject": r["subject"], "prompt": r["prompt"], "response": r["answer"]} for r in forget_eval]
-    retain_basic = [{"subject": r["subject"], "prompt": r["prompt"], "response": r["answer"]} for r in retain_eval]
+    full_method = _method_rows(forget_rows) + _method_rows(retain_rows)
+    _write_jsonl(method_dir / f"full_{args.split}_{retain_split}.jsonl", full_method)
+    _write_jsonl(method_dir / f"{args.split}_only.jsonl", _method_rows(forget_rows))
+    _write_jsonl(method_dir / f"{retain_split}_only.jsonl", _method_rows(retain_rows))
 
-    _write_jsonl(data_dir / f"{args.split}.jsonl", forget_eval)
-    _write_jsonl(data_dir / f"{retain_split}.jsonl", retain_eval)
-    _write_jsonl(method_dir / f"full_{args.split}_{retain_split}.jsonl", forget_basic + retain_basic)
-    _write_jsonl(method_dir / f"{args.split}_only.jsonl", forget_basic)
-    _write_jsonl(method_dir / f"{retain_split}_only.jsonl", retain_basic)
+    forget_subjects = sorted({r["subject"] for r in forget_rows})
+    (subj_dir / f"{args.split}_subjects.txt").write_text("\n".join(forget_subjects) + "\n", encoding="utf-8")
 
-    if real_raw is not None:
-        real_eval = [_to_eval_row(r) for r in real_raw]
-        real_eval = [r for r in real_eval if r is not None]
-        real_eval = _ensure_perturbations(real_eval, retain_eval + forget_eval, k=5)
-        _write_jsonl(data_dir / "real_authors.jsonl", real_eval)
-    else:
-        print("[warn] real_authors split not found; MU will use retain/world available metrics only unless provided later.")
-
-    if world_raw is not None:
-        world_eval = [_to_eval_row(r) for r in world_raw]
-        world_eval = [r for r in world_eval if r is not None]
-        world_eval = _ensure_perturbations(world_eval, retain_eval + forget_eval, k=5)
-        _write_jsonl(data_dir / "world_facts.jsonl", world_eval)
-    else:
-        print("[warn] world_facts split not found; MU will use retain/real available metrics only unless provided later.")
-
-    subjects = sorted({r["subject"] for r in forget_basic})
-    (subj_dir / f"{args.split}_subjects.txt").write_text("\n".join(subjects) + "\n", encoding="utf-8")
     summary = {
         "dataset": args.dataset,
         "split": args.split,
         "retain_split": retain_split,
-        "forget_rows": len(forget_basic),
-        "retain_rows": len(retain_basic),
-        "forget_subjects": subjects,
-        "forget_subject_count": len(subjects),
-        "forget_counts": dict(Counter(r["subject"] for r in forget_basic)),
+        "holdout_split": holdout_split,
+        "faithfulness": "strict_open_unlearning_tofu_configs_no_fallback_perturbations",
+        "hf_configs": {
+            "forget": args.split,
+            "retain": retain_split,
+            "forget_perturbed": f"{args.split}_perturbed",
+            "retain_perturbed": "retain_perturbed",
+            "real_authors": "real_authors_perturbed",
+            "world_facts": "world_facts_perturbed",
+        },
+        "forget_rows": len(forget_rows),
+        "retain_rows": len(retain_rows),
+        "real_authors_rows": len(real_rows),
+        "world_facts_rows": len(world_rows),
+        "forget_subject_count": len(forget_subjects),
+        "forget_counts": dict(Counter(r["subject"] for r in forget_rows)),
         "method_input": str(method_dir / f"full_{args.split}_{retain_split}.jsonl"),
-        "note": "If the HF split lacks provided perturbations, prepare_tofu falls back to other TOFU answers and marks perturbation_source.",
+        "subjects_file": str(subj_dir / f"{args.split}_subjects.txt"),
+        "status": "ok",
     }
     (out / f"prepare_summary_{args.split}.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
