@@ -1,6 +1,24 @@
 # KIF Baseline, TOFU, and PCA Visualization Handover
 
-This handover summarizes the current state of the `kif-evals` repo, the cluster workflow, the TOFU FQ/MU benchmark, and the PCA activation-space visualization. It is written so a new ChatGPT chat can immediately continue without needing the full previous conversation.
+This handover summarizes all work completed so far in the `kif-evals` repository and on the bwUniCluster workflow. It is intended to be pasted or referenced in a new ChatGPT chat so the new chat can immediately continue the same project without rereading the full conversation.
+
+---
+
+## 0. High-level goal
+
+The project evaluates KIF against several unlearning baselines under two separate evaluation regimes:
+
+1. **KIF-controlled musician benchmark**
+   - Same model/dataset/evaluator for all methods.
+   - Metrics: Module 8 SMR, EL10, utility drift, and related summaries.
+   - Purpose: apples-to-apples comparison under KIF's dual-metric evaluator.
+
+2. **TOFU forget10 benchmark**
+   - No SMR/EL10.
+   - Metrics: TOFU/SimNPO/KIF-style Forget Quality and Model Utility.
+   - Purpose: report FQ/MU like KIF and SimNPO, using the TOFU split and full TOFU fine-tuned Llama-2-7B-Chat checkpoint.
+
+A separate visualization script was also added for **PCA activation-space analysis** to support the representation-level erasure claim.
 
 ---
 
@@ -40,7 +58,66 @@ Use `src_pca` for visualization work while the TOFU job is active.
 
 ---
 
-## 2. KIF evaluation framework status
+## 2. Repository components currently added/modified
+
+Core method files:
+
+```text
+framework/methods/lunar.py
+framework/methods/reglu.py
+framework/methods/optout.py
+framework/methods/simnpo.py
+framework/methods/base.py
+framework/orchestrate.py
+framework/eval/module8_eval.py
+```
+
+KIF musician benchmark scripts added or used:
+
+```text
+framework/scripts/reglu_dataset_check_dev.slurm
+framework/scripts/reglu_smoke_dev.slurm
+framework/scripts/reglu_main_run.slurm
+framework/scripts/optout_dataset_check_dev.slurm
+framework/scripts/optout_main_run.slurm
+framework/scripts/simnpo_dataset_check_dev.slurm
+framework/scripts/simnpo_main_run.slurm
+framework/scripts/simnpo_pure_main_run.slurm
+framework/scripts/simnpo_main_run_devfull.slurm
+framework/scripts/simnpo_pure_main_run_devfull.slurm
+```
+
+TOFU files added:
+
+```text
+framework/tofu_eval/__init__.py
+framework/tofu_eval/prepare_tofu.py
+framework/tofu_eval/metrics.py
+framework/tofu_eval/evaluate_tofu.py
+framework/tofu_eval/compare_tofu_results.py
+framework/scripts/tofu_prepare_data.slurm
+framework/scripts/tofu_eval_retain_reference.slurm
+framework/scripts/tofu_eval_model_dev.slurm
+framework/scripts/tofu_run_method_devfull.slurm
+framework/scripts/tofu_smoke_all_methods_dev.slurm
+framework/scripts/tofu_run_all_methods_main.slurm
+```
+
+PCA visualization added:
+
+```text
+analysis/pca_activation_analysis.py
+```
+
+Handover file:
+
+```text
+HANDOVER_TOFU_PCA.md
+```
+
+---
+
+## 3. KIF evaluation framework status
 
 The repo implements a plug-and-play unlearning evaluation framework. Each method reads a shared `prompts.jsonl`, saves a model or adapter through a common `UnlearningResult`, and then the evaluator can load that output.
 
@@ -81,9 +158,160 @@ Every method reads the same data, unlearns the same targets, saves a model/adapt
 
 ---
 
-## 3. Method faithfulness summary for KIF benchmark
+## 4. KIF musician benchmark dataset handling
 
-### SimNPO / SimNPO-GradDiff
+The baseline runs use the KIF prompt file, but methods needing retain data require a non-forgotten subject. We added/used an Adele retain/control set.
+
+Expected KIF prompt file used by method runs:
+
+```text
+framework/outputs/<method>/prompts_with_adele_retain.jsonl
+```
+
+A successful ReGLU dataset check showed:
+
+```text
+total_usable_rows: 5763
+num_subjects: 12
+forget_rows_selected: 132
+retain_pool_rows: 30
+adele_rows: 30
+status: ok
+```
+
+Requested forget subjects for KIF musician benchmark:
+
+```text
+Ariana Grande
+Arijit Singh
+Beyoncé
+Drake (musician)
+Ed Sheeran
+Eminem
+Kanye West
+Katy Perry
+Michael Jackson
+Queen (band)
+Taylor Swift
+```
+
+Forget count in successful dataset check:
+
+```text
+12 rows per forget subject, 132 total forget rows
+```
+
+Important debugging note:
+
+```text
+Earlier dataset check failed because only Adele rows were present. This was fixed by pointing the dataset preparation to the correct base prompts file under the app/source outputs rather than the already reduced Adele-only file.
+```
+
+---
+
+## 5. Method faithfulness summary for KIF benchmark
+
+### 5.1 LUNAR
+
+Status: faithful core, approximate layer selection.
+
+Implemented decisions:
+
+```text
+Base model: meta-llama/Llama-3.1-8B
+model_family: llama3-8b
+chat template: "{instruction}" for llama3-8b base model
+lambda_reg: 1e-3
+auto_select_layer: true
+raw UV direction, no UV norm scaling
+closed-form ridge solve
+```
+
+Important correction history:
+
+```text
+At one point UV scaling was added to control a large UV norm, but for faithful LUNAR reproduction it was removed. The final LUNAR code uses raw UV as in the paper.
+```
+
+Caveat:
+
+```text
+The core activation redirection is faithful, but auto layer selection is KIF-compatible/approximate rather than a bit-exact upstream reproduction.
+```
+
+### 5.2 ReGLU
+
+Status: faithful after patches.
+
+Important fixes applied inline to `framework/methods/reglu.py`:
+
+```text
+1. Representation pooling changed from mean(dim=1) to sum(dim=1).
+2. RILA covariance uses explicit torch.linalg.eigh, not the low-rank QR trick.
+3. RILA shrinkage is eps * I on covariance, no activation noise injection.
+4. IHL loss uses non-in-place scatter, avoiding autograd mutation.
+5. Removed W_res cache to reduce memory.
+6. Added llama3.1-8b chat template/default where needed.
+7. Expanded UNVERIFIABLE_PROMPTS to 20 entries.
+8. Removed external patch-file dependency by folding fixes into reglu.py.
+```
+
+Main KIF ReGLU settings:
+
+```text
+variant: ihl
+lora_targets: all
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+rila_beta: 0.5
+rila_samples_per_split: 128
+rila_cov_shrink: 1e-4
+rol_lambda: 0.5
+rol_rank: 128
+retain_gamma: 1.0
+num_epochs: 5
+batch_size: 4
+gradient_accumulation_steps: 8
+learning_rate: 1e-4
+```
+
+### 5.3 OPT-OUT
+
+Status: method-faithful, system-adapted.
+
+Implemented details:
+
+```text
+method: npo+rt+wd+ot
+dpo_beta: 0.1
+reg_lambda: 0.1
+learning_rate: 1e-5
+num_epochs: 3
+weight_decay: 0.01
+swd_n_projections: 100
+alternate_updates: true
+full-model training
+world data: external Alpaca-GPT4 world data when available
+```
+
+World-data handling:
+
+```text
+Initially OPT-OUT used the built-in fallback world data with 20 rows.
+Then the external world JSON was located and used:
+framework/outputs/optout/world/alpaca_gpt4_data_train.json
+world_rows_available: 50002
+world_status: external_world_json
+```
+
+Caveat:
+
+```text
+Objective and hyperparameters are method-faithful, but the system execution uses our cluster/device_map adaptation rather than exact upstream distributed training.
+```
+
+### 5.4 SimNPO and SimNPO-GradDiff
 
 Status: most faithful.
 
@@ -99,6 +327,7 @@ gradient_accumulation_steps = 4
 weight_decay = 0.01
 max_seq_len = 500
 optimizer_name = paged_adamw_32bit
+trainable_modules = all
 ```
 
 Pure SimNPO:
@@ -115,62 +344,58 @@ npo_coeff = 0.1375
 grad_diff_coeff = 1.0
 ```
 
-### ReGLU
-
-Status: faithful after patches.
-
-Important fixes already applied:
+Completed KIF dev-full pure SimNPO result:
 
 ```text
-RILA pooling: sum(dim=1), not mean(dim=1)
-Covariance: explicit torch.linalg.eigh
-Shrinkage: eps * I added to covariance, no activation noise
-IHL: non-in-place scatter to avoid autograd mutation
-LoRA main setting: targets=all, r=32, alpha=64
-Variant: ihl
+Job ID: 4738755
+Script: framework/scripts/simnpo_pure_main_run_devfull.slurm
+Partition: dev_gpu_a100_il / dev_gpu_h100
+GPUs: 4 x A100 80GB
+State: completed
+Output root:
+framework/outputs/simnpo_pure/simnpo_pure_main_4738755
 ```
 
-### LUNAR
-
-Status: faithful core, approximate layer selection.
-
-Important details:
+Important note:
 
 ```text
-Raw UV direction, no UV scaling
-lambda_reg = 1e-3
-Base model template: llama3-8b -> "{instruction}"
-Closed-form ridge solve
-Caveat: auto layer selection is KIF-compatible approximation, not bit-exact upstream search
-```
-
-### OPT-OUT
-
-Status: method-faithful, system-adapted.
-
-Important details:
-
-```text
-method = npo+rt+wd+ot
-dpo_beta = 0.1
-reg_lambda = 0.1
-lr = 1e-5
-num_epochs = 3
-weight_decay = 0.01
-swd_n_projections = 100
-full-model training
-uses external Alpaca-GPT4 world data when available
-```
-
-Caveat:
-
-```text
-The objective and hyperparameters are faithful, but execution is adapted to the cluster/device_map setting rather than reproducing upstream distributed training exactly.
+The completed job 4738755 was pure SimNPO, not GradDiff. Check simnpo_meta.json for variant/use_retain_loss when labeling results.
 ```
 
 ---
 
-## 4. TOFU benchmark objective
+## 6. Dev-full scripts for KIF SimNPO
+
+Added scripts:
+
+```text
+framework/scripts/simnpo_main_run_devfull.slurm
+framework/scripts/simnpo_pure_main_run_devfull.slurm
+```
+
+Purpose:
+
+```text
+Run the full main SimNPO path on dev GPU with 4 GPUs and a 30-minute limit, mainly to verify the full path starts/progresses while waiting for main queue.
+```
+
+Typical command:
+
+```bash
+cd /pfs/work9/workspace/scratch/hd_ur228-llmrun/src
+sed -i 's/\r$//' framework/scripts/simnpo_pure_main_run_devfull.slurm
+sbatch framework/scripts/simnpo_pure_main_run_devfull.slurm
+```
+
+Monitor:
+
+```bash
+tail -f "$(ls -t /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/logs/simnpo-pure-main-devfull-*.out | head -n 1)"
+```
+
+---
+
+## 7. TOFU benchmark objective
 
 The user wants TOFU evaluated like KIF/SimNPO:
 
@@ -202,9 +427,15 @@ Prompt format:
 
 This matches the SimNPO/Unlearn-Simple style TOFU setup using Llama-2-7B-Chat.
 
+Important distinction:
+
+```text
+TOFU runs must use the TOFU full fine-tuned model as the starting checkpoint. They should not evaluate the KIF musician-trained/unlearned models on TOFU.
+```
+
 ---
 
-## 5. TOFU dataset preparation
+## 8. TOFU dataset preparation
 
 Dataset prep script:
 
@@ -267,9 +498,16 @@ Important correction:
 Do not row-match full retain90 against retain_perturbed. retain90 has 3600 rows, retain_perturbed has 400 rows. OpenUnlearning-style evaluation uses retain_perturbed directly for retain eval, while full retain90 is used as the retain training pool.
 ```
 
+Dataset prep debug history:
+
+```text
+First failure: retain90 vs retain_perturbed row-count mismatch, because code tried to row-match 3600 vs 400 rows. Fixed by using retain_perturbed directly for retain eval and saving full retain90 as retain90_train.jsonl.
+Second failure: real_authors_perturbed/world_facts_perturbed lack paraphrased_answer. Fixed by using answer as correct answer for those official configs.
+```
+
 ---
 
-## 6. TOFU evaluator
+## 9. TOFU evaluator
 
 Files:
 
@@ -309,9 +547,17 @@ Expected result keys:
 }
 ```
 
+Retain reference handling:
+
+```text
+The all-method TOFU job can use TOFU_RETAIN_MODEL_DIR if a true retain90 checkpoint is available. If not provided, it creates reference logs from locuslab/tofu_ft_llama2-7b and marks it as fallback_full_model_reference_no_explicit_retain90_checkpoint.
+```
+
+Most faithful FQ requires a true retain90 model reference if available.
+
 ---
 
-## 7. TOFU smoke test status
+## 10. TOFU smoke test status
 
 Smoke script:
 
@@ -356,7 +602,7 @@ The full TOFU all-method run is justified because model loading, prompt formatti
 
 ---
 
-## 8. TOFU all-method main job
+## 11. TOFU all-method main job
 
 Main script:
 
@@ -423,7 +669,7 @@ cat /pfs/work9/workspace/scratch/hd_ur228-llmrun/src/framework/outputs/tofu/tofu
 
 ---
 
-## 9. PCA activation visualization
+## 12. PCA activation visualization
 
 Standalone PCA script:
 
@@ -475,7 +721,7 @@ Do not git pull in /src while TOFU job is running. Use /src_pca instead.
 
 ---
 
-## 10. Running PCA from separate checkout
+## 13. Running PCA from separate checkout
 
 Go to separate checkout:
 
@@ -569,7 +815,7 @@ cat /pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/analysis/outputs/centro
 
 ---
 
-## 11. If PCA auto-discovery selects the wrong files
+## 14. If PCA auto-discovery selects the wrong files
 
 The PCA script can auto-discover KIF and baseline artifacts from:
 
@@ -600,7 +846,7 @@ Use OPT-OUT baseline if available/preferred, otherwise SimNPO baseline with lowe
 
 ---
 
-## 12. Useful monitoring commands
+## 15. Useful monitoring commands
 
 List running jobs:
 
@@ -632,9 +878,24 @@ Check GPU usage on an allocated node:
 watch -n 10 nvidia-smi
 ```
 
+Check available/partition limits:
+
+```bash
+sinfo -p gpu_h100,gpu_a100_il,gpu_h100_il -o "%P %a %D %G %c %m %l"
+scontrol show partition gpu_h100 | egrep "PartitionName|MaxTime|DefaultTime|MaxNodes|MaxCPUs|TRES|Allow"
+scontrol show partition gpu_a100_il | egrep "PartitionName|MaxTime|DefaultTime|MaxNodes|MaxCPUs|TRES|Allow"
+scontrol show partition gpu_h100_il | egrep "PartitionName|MaxTime|DefaultTime|MaxNodes|MaxCPUs|TRES|Allow"
+```
+
+Dry-run a Slurm script:
+
+```bash
+sbatch --test-only <script.slurm>
+```
+
 ---
 
-## 13. Current most important next steps
+## 16. Current most important next steps
 
 1. Monitor the TOFU all-method job until completion.
 2. Do not mutate `/src` while TOFU job is running.
@@ -655,3 +916,31 @@ src_pca/analysis/outputs/centroid_displacement.json
 ```
 
 6. If PCA auto-selection chooses the wrong KIF/baseline artifacts, rerun with explicit `--kif_adapter_path` and `--baseline_model_dir`.
+
+---
+
+## 17. Suggested wording for reporting comparability
+
+Use this wording:
+
+```text
+We implemented faithful method-level adaptations of LUNAR, ReGLU, OPT-OUT, SimNPO, and SimNPO-GradDiff under a common KIF-controlled benchmark. Dataset, base model, and evaluator are standardized; each method preserves its core optimization objective and reported hyperparameters where feasible. Distributed/runtime details are adapted to cluster constraints where necessary.
+```
+
+Avoid claiming:
+
+```text
+We exactly reproduce every upstream paper's original experimental setting.
+```
+
+For TOFU, use:
+
+```text
+For TOFU, we follow the SimNPO/KIF-style linear reporting convention: Forget Quality is the KS-test p-value on truth-ratio distributions, and Model Utility is the harmonic mean of non-forget utility metrics. We do not apply a log transform to FQ.
+```
+
+For PCA:
+
+```text
+We fit PCA on pre-unlearning activations only and transform all post-unlearning models into the same PCA space. The centroid displacement ratio measures how far forget-subject activations move toward the pre-unlearning unknown/unverifiable region.
+```
