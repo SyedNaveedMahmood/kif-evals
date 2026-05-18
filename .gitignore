@@ -107,9 +107,11 @@ activation_report.json
 /Reglu/**/*.err
 /Reglu/**/*.log
 
-# Keep app/outputs ignored by default, except Module 8 eval summaries
+# Keep app/outputs ignored by default, except selected small JSON artifacts.
 /app/outputs/**
 !/app/outputs/
+!/app/outputs/datasets/
+!/app/outputs/datasets/prompts.jsonl
 !/app/outputs/sweeps/
 !/app/outputs/sweeps/*/
 !/app/outputs/sweeps/*/seed*/
