@@ -2,17 +2,16 @@
 """
 PCA activation analysis for KIF representation-level erasure.
 
-This standalone script compares activations for:
+Compares:
   1. PRE base model
   2. POST-KIF model/adapter
-  3. POST-BASELINE model/adapter
+  3. POST-baseline model/adapter
 
-Important design choices:
-  - The hook module is taken from KIF capsule metadata unless --layer_override is passed.
-  - PCA is fitted on PRE activations only.
-  - Unknown/benign anchor clouds in POST panels are kept fixed to PRE activations.
-  - Movement is reported as *directed progress toward the PRE unknown centroid*, not just
-    Euclidean displacement. This avoids falsely rewarding sideways/away movement.
+The plot is intentionally conservative:
+  - PCA is fitted only on PRE activations.
+  - Unknown and benign clouds are fixed PRE anchors in every panel.
+  - Movement is measured as signed progress toward the PRE unknown centroid (d→),
+    not just Euclidean displacement. Sideways drift is reported separately (d⊥).
 """
 
 from __future__ import annotations
@@ -130,10 +129,7 @@ def recursive_find_key(obj: Any, patterns: Iterable[str]) -> List[Any]:
 
 
 def extract_smr_from_json(obj: Dict[str, Any]) -> Optional[float]:
-    candidates = recursive_find_key(
-        obj,
-        ["smr", "subject_mention_rate", "mention_rate", "mean_smr", "avg_smr"],
-    )
+    candidates = recursive_find_key(obj, ["smr", "subject_mention_rate", "mention_rate", "mean_smr", "avg_smr"])
     nums: List[float] = []
     for c in candidates:
         if isinstance(c, dict):
@@ -179,13 +175,7 @@ def nearest_smr(path: Path) -> Optional[float]:
 
 
 def manifest_model_path(manifest: Dict[str, Any]) -> Optional[str]:
-    """Return the actual unlearned artifact path from a manifest.
-
-    The earlier implementation preferred model_dir before adapter_path. In this
-    framework, model_dir is often just the original base model, while adapter_path
-    is the actual learned method output. Prefer merged model first, then adapter,
-    and only fall back to model_dir when no output artifact exists.
-    """
+    # Prefer actual unlearned artifact over original base model.
     for key in ("merged_model_dir", "adapter_path", "model_dir"):
         val = manifest.get(key)
         if val:
@@ -213,33 +203,20 @@ def discover_unlearning_artifacts(outputs_root: Path) -> Dict[str, List[Dict[str
             continue
         method = str(obj.get("method_name") or "").lower()
         model_path = manifest_model_path(obj)
-        eval_smr = None
-        for possible in [
-            manifest_path.parent.parent / "eval" / "final_summary.json",
-            manifest_path.parent.parent / "eval" / "eval_summary.json",
-            manifest_path.parent / "eval" / "final_summary.json",
-            manifest_path.parent / "eval_summary.json",
-        ]:
-            if possible.exists():
-                s_obj = read_json(possible)
-                if s_obj:
-                    eval_smr = extract_smr_from_json(s_obj)
-                    if eval_smr is not None:
-                        break
-        if model_path:
-            selected_is_adapter = is_peft_adapter_path(model_path, obj)
-            candidates.append(
-                {
-                    "kind": "manifest",
-                    "path": model_path,
-                    "manifest": str(manifest_path),
-                    "method": method or guess_method_from_path(manifest_path),
-                    "smr": eval_smr,
-                    "is_adapter": selected_is_adapter,
-                    "is_merged": bool(obj.get("merged_model_dir")) and not selected_is_adapter,
-                    "raw": obj,
-                }
-            )
+        if not model_path:
+            continue
+        candidates.append(
+            {
+                "kind": "manifest",
+                "path": model_path,
+                "manifest": str(manifest_path),
+                "method": method or guess_method_from_path(manifest_path),
+                "smr": nearest_smr(manifest_path.parent),
+                "is_adapter": is_peft_adapter_path(model_path, obj),
+                "is_merged": bool(obj.get("merged_model_dir")),
+                "raw": obj,
+            }
+        )
 
     for adapter_cfg in outputs_root.rglob("adapter_config.json"):
         d = adapter_cfg.parent
@@ -303,30 +280,10 @@ def discover_unlearning_artifacts(outputs_root: Path) -> Dict[str, List[Dict[str
     return {"all": all_candidates, "kif": kif, "baselines": baselines}
 
 
-def score_kif_candidate(c: Dict[str, Any]) -> Tuple[int, float, str]:
-    s = json.dumps(c, ensure_ascii=False).lower()
-    score = 0
-    if "seed" in s and "23" in s:
-        score += 50
-    if "config_b" in s or "config b" in s or "cfg_b" in s:
-        score += 40
-    if "global_adapters" in s:
-        score += 20
-    if "repaware" in s or "kif" in s:
-        score += 20
-    if c.get("is_adapter"):
-        score += 10
-    smr = c.get("smr")
-    if smr is not None and abs(float(smr)) < 1e-12:
-        score += 100
-    smr_val = float(smr) if smr is not None else 999.0
-    return (score, -smr_val, str(c.get("path", "")))
-
-
 def score_baseline_candidate(c: Dict[str, Any], prefer: str = "optout") -> Tuple[int, float, str]:
     s = json.dumps(c, ensure_ascii=False).lower()
-    score = 0
     method = str(c.get("method", "")).lower()
+    score = 0
     if prefer and prefer.lower() in s:
         score += 50
     if method == prefer.lower():
@@ -342,17 +299,6 @@ def score_baseline_candidate(c: Dict[str, Any], prefer: str = "optout") -> Tuple
     smr = c.get("smr")
     smr_val = float(smr) if smr is not None else 999.0
     return (score, -smr_val, str(c.get("path", "")))
-
-
-def auto_select_kif_path(outputs_root: Path) -> Optional[str]:
-    cands = discover_unlearning_artifacts(outputs_root)["kif"]
-    if not cands:
-        return None
-    cands = sorted(cands, key=score_kif_candidate, reverse=True)
-    log("KIF artifact candidates:")
-    for c in cands[:10]:
-        log(f"  path={c.get('path')} method={c.get('method')} smr={c.get('smr')} kind={c.get('kind')}")
-    return str(cands[0]["path"])
 
 
 def auto_select_baseline_path(outputs_root: Path, prefer: str = "optout") -> Optional[str]:
@@ -432,18 +378,14 @@ def load_model_artifact(path: str, base_model_dir: str, device: str, dtype: torc
     path_obj = Path(path)
     kwargs: Dict[str, Any] = {"trust_remote_code": True}
     if use_4bit:
-        try:
-            from transformers import BitsAndBytesConfig
-            kwargs["quantization_config"] = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_use_double_quant=True,
-            )
-            kwargs["device_map"] = "auto"
-        except Exception as exc:
-            log(f"4-bit requested but unavailable ({exc}); falling back to dtype={dtype}.")
-            kwargs["torch_dtype"] = dtype
+        from transformers import BitsAndBytesConfig
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+        kwargs["device_map"] = "auto"
     else:
         kwargs["torch_dtype"] = dtype
 
@@ -468,21 +410,12 @@ def load_model_artifact(path: str, base_model_dir: str, device: str, dtype: torc
 
 def resolve_module(model: torch.nn.Module, module_name: str) -> Tuple[str, torch.nn.Module]:
     modules = dict(model.named_modules())
-    candidates = [
-        module_name,
-        f"base_model.model.{module_name}",
-        f"model.{module_name}",
-        f"base_model.{module_name}",
-    ]
+    candidates = [module_name, f"base_model.model.{module_name}", f"model.{module_name}", f"base_model.{module_name}"]
     for cand in candidates:
         if cand in modules:
             return cand, modules[cand]
-    suffix_hits = [(name, mod) for name, mod in modules.items() if name.endswith(module_name)]
-    if suffix_hits:
-        suffix_hits.sort(key=lambda x: len(x[0]))
-        return suffix_hits[0]
     clean = module_name.replace("base_model.model.", "").replace("model.", "")
-    suffix_hits = [(name, mod) for name, mod in modules.items() if name.endswith(clean)]
+    suffix_hits = [(name, mod) for name, mod in modules.items() if name.endswith(module_name) or name.endswith(clean)]
     if suffix_hits:
         suffix_hits.sort(key=lambda x: len(x[0]))
         return suffix_hits[0]
@@ -521,13 +454,7 @@ def extract_activations(
     try:
         for start in range(0, len(prompts), batch_size):
             batch_prompts = prompts[start:start + batch_size]
-            enc = tokenizer(
-                batch_prompts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=max_length,
-            )
+            enc = tokenizer(batch_prompts, return_tensors="pt", padding=True, truncation=True, max_length=max_length)
             enc = {k: v.to(device) for k, v in enc.items()}
             _ = model(**enc)
     finally:
@@ -545,41 +472,22 @@ def transform_sets(pca: PCA, sets: Dict[str, np.ndarray]) -> Dict[str, np.ndarra
     return {k: pca.transform(v) for k, v in sets.items()}
 
 
-def centroid_metrics(
-    pre_forget: np.ndarray,
-    pre_unknown: np.ndarray,
-    post_forget: np.ndarray,
-    eps: float = 1e-12,
-) -> Dict[str, Any]:
-    """Compute directed centroid movement toward the PRE unknown region.
-
-    d_total is the old norm-only displacement. d_toward_unknown is the signed
-    projection of the movement onto the PRE forget->unknown vector, normalized by
-    the PRE forget-to-unknown distance. Positive means movement toward unknown;
-    negative means movement away. d_perp measures sideways drift.
-    """
+def centroid_metrics(pre_forget: np.ndarray, pre_unknown: np.ndarray, post_forget: np.ndarray, eps: float = 1e-12) -> Dict[str, Any]:
     mu_pre_f = pre_forget.mean(axis=0)
     mu_pre_u = pre_unknown.mean(axis=0)
     mu_post_f = post_forget.mean(axis=0)
-
     target = mu_pre_u - mu_pre_f
     move = mu_post_f - mu_pre_f
     denom_sq = float(np.dot(target, target)) + eps
     denom = math.sqrt(denom_sq)
-
     d_toward = float(np.dot(move, target) / denom_sq)
     parallel = d_toward * target
     residual = move - parallel
-
-    d_total = float(np.linalg.norm(move) / denom)
-    d_perp = float(np.linalg.norm(residual) / denom)
-    dist_to_unknown = float(np.linalg.norm(mu_post_f - mu_pre_u) / denom)
-
     return {
-        "d_total_norm_old": d_total,
+        "d_total_norm_old": float(np.linalg.norm(move) / denom),
         "d_toward_unknown": d_toward,
-        "d_perpendicular": d_perp,
-        "distance_to_pre_unknown": dist_to_unknown,
+        "d_perpendicular": float(np.linalg.norm(residual) / denom),
+        "distance_to_pre_unknown": float(np.linalg.norm(mu_post_f - mu_pre_u) / denom),
         "mu_pre_forget": mu_pre_f.tolist(),
         "mu_pre_unknown": mu_pre_u.tolist(),
         "mu_post_forget": mu_post_f.tolist(),
@@ -601,11 +509,10 @@ def plot_panel(
     ax,
     pre_projected: Dict[str, np.ndarray],
     title: str,
-    metrics: Optional[Dict[str, Any]] = None,
+    metrics: Dict[str, Any],
     post_forget: Optional[np.ndarray] = None,
     show_legend: bool = False,
 ) -> None:
-    # In POST panels, unknown and benign are intentionally PRE anchors.
     forget = pre_projected["forget"] if post_forget is None else post_forget
     unknown = pre_projected["unknown"]
     benign = pre_projected["benign"]
@@ -632,21 +539,13 @@ def plot_panel(
         ax.annotate("", xy=(mu_f[0], mu_f[1]), xytext=(mu_pre_f[0], mu_pre_f[1]),
                     arrowprops=dict(arrowstyle="->", lw=1.8, color="red", alpha=0.85))
         ax.annotate("", xy=(mu_u[0], mu_u[1]), xytext=(mu_pre_f[0], mu_pre_f[1]),
-                    arrowprops=dict(arrowstyle="-->", lw=1.0, color="grey", alpha=0.45))
+                    arrowprops=dict(arrowstyle="->", linestyle="--", lw=1.0, color="grey", alpha=0.45))
 
     ax.set_title(title, fontsize=13)
     ax.set_xlabel("PC1", fontsize=11)
     ax.set_ylabel("PC2", fontsize=11)
     ax.grid(True, alpha=0.2)
-
-    if metrics is None:
-        text = "d→=0.00\nd⊥=0.00"
-    else:
-        text = (
-            f"d→={metrics['d_toward_unknown']:.2f}\n"
-            f"d⊥={metrics['d_perpendicular']:.2f}\n"
-            f"distU={metrics['distance_to_pre_unknown']:.2f}"
-        )
+    text = f"d→={metrics['d_toward_unknown']:.2f}\nd⊥={metrics['d_perpendicular']:.2f}\ndistU={metrics['distance_to_pre_unknown']:.2f}"
     ax.text(0.04, 0.94, text, transform=ax.transAxes, fontsize=11, va="top", ha="left",
             bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="black", alpha=0.85))
     if show_legend:
@@ -686,16 +585,15 @@ def main() -> None:
     subjects = load_subjects_from_prompts(Path(args.prompts_jsonl), max_subjects=args.max_subjects)
     if not subjects:
         raise RuntimeError(f"No subjects found in {args.prompts_jsonl}")
+
     forget_prompts = build_forget_prompts(subjects, prompts_per_subject=args.prompts_per_subject)
-    unknown_prompts = UNVERIFIABLE_PROMPTS
-    benign_prompts = BENIGN_PROMPTS
-
+    prompt_sets = {"forget": forget_prompts, "unknown": UNVERIFIABLE_PROMPTS, "benign": BENIGN_PROMPTS}
     log(f"Forget subjects ({len(subjects)}): {subjects}")
-    log(f"Prompt counts: forget={len(forget_prompts)} unknown={len(unknown_prompts)} benign={len(benign_prompts)}")
+    log(f"Prompt counts: forget={len(prompt_sets['forget'])} unknown={len(prompt_sets['unknown'])} benign={len(prompt_sets['benign'])}")
 
-    kif_path = args.kif_adapter_path or auto_select_kif_path(Path(args.outputs_root))
-    if not kif_path:
-        raise FileNotFoundError("Could not auto-discover KIF artifact. Pass --kif_adapter_path explicitly.")
+    if not args.kif_adapter_path:
+        raise FileNotFoundError("Pass --kif_adapter_path explicitly for this plot.")
+    kif_path = args.kif_adapter_path
     baseline_path = args.baseline_model_dir or auto_select_baseline_path(Path(args.outputs_root), prefer=args.baseline_prefer)
     if not baseline_path:
         raise FileNotFoundError("Could not auto-discover baseline artifact. Pass --baseline_model_dir explicitly.")
@@ -704,7 +602,6 @@ def main() -> None:
 
     tokenizer = load_tokenizer(args.model_dir)
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    prompt_sets = {"forget": forget_prompts, "unknown": unknown_prompts, "benign": benign_prompts}
 
     def extract_for_artifact(label: str, artifact: Optional[str]) -> Dict[str, np.ndarray]:
         if label == "pre":
@@ -728,20 +625,15 @@ def main() -> None:
     kif_acts = extract_for_artifact("post_kif", kif_path)
     baseline_acts = extract_for_artifact("post_baseline", baseline_path)
 
-    pre_combined = np.concatenate([pre_acts["forget"], pre_acts["unknown"], pre_acts["benign"]], axis=0)
     pca = PCA(n_components=2, random_state=17)
+    pre_combined = np.concatenate([pre_acts["forget"], pre_acts["unknown"], pre_acts["benign"]], axis=0)
     pca.fit(pre_combined)
 
     pre_proj = transform_sets(pca, pre_acts)
     kif_proj = transform_sets(pca, kif_acts)
     baseline_proj = transform_sets(pca, baseline_acts)
 
-    zero_metrics = {
-        "d_total_norm_old": 0.0,
-        "d_toward_unknown": 0.0,
-        "d_perpendicular": 0.0,
-        "distance_to_pre_unknown": 1.0,
-    }
+    zero_metrics = {"d_total_norm_old": 0.0, "d_toward_unknown": 0.0, "d_perpendicular": 0.0, "distance_to_pre_unknown": 1.0}
     kif_metrics_raw = centroid_metrics(pre_acts["forget"], pre_acts["unknown"], kif_acts["forget"])
     baseline_metrics_raw = centroid_metrics(pre_acts["forget"], pre_acts["unknown"], baseline_acts["forget"])
     kif_metrics_pca = centroid_metrics(pre_proj["forget"], pre_proj["unknown"], kif_proj["forget"])
@@ -749,18 +641,10 @@ def main() -> None:
 
     plt.rcParams.update({"figure.facecolor": "white", "axes.facecolor": "white", "savefig.facecolor": "white", "font.size": 11})
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-    plot_panel(axes[0], pre_proj, "Pre-Unlearning", metrics=zero_metrics, post_forget=None, show_legend=True)
-    plot_panel(axes[1], pre_proj, f"Post-KIF (d→={kif_metrics_pca['d_toward_unknown']:.2f})",
-               metrics=kif_metrics_pca, post_forget=kif_proj["forget"], show_legend=False)
-    plot_panel(axes[2], pre_proj, f"Post-Baseline (d→={baseline_metrics_pca['d_toward_unknown']:.2f})",
-               metrics=baseline_metrics_pca, post_forget=baseline_proj["forget"], show_legend=False)
-    set_shared_limits(
-        axes,
-        [
-            pre_proj["forget"], pre_proj["unknown"], pre_proj["benign"],
-            kif_proj["forget"], baseline_proj["forget"],
-        ],
-    )
+    plot_panel(axes[0], pre_proj, "Pre-Unlearning", zero_metrics, post_forget=None, show_legend=True)
+    plot_panel(axes[1], pre_proj, f"Post-KIF (d→={kif_metrics_pca['d_toward_unknown']:.2f})", kif_metrics_pca, post_forget=kif_proj["forget"])
+    plot_panel(axes[2], pre_proj, f"Post-Baseline (d→={baseline_metrics_pca['d_toward_unknown']:.2f})", baseline_metrics_pca, post_forget=baseline_proj["forget"])
+    set_shared_limits(axes, [pre_proj["forget"], pre_proj["unknown"], pre_proj["benign"], kif_proj["forget"], baseline_proj["forget"]])
     fig.suptitle("Activation Space PCA — Directed Movement Toward PRE Unknown Anchor", fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
 
@@ -775,25 +659,19 @@ def main() -> None:
             "artifact": kif_path,
             "pca_space": kif_metrics_pca,
             "raw_activation_space": kif_metrics_raw,
-            "interpretation": (
-                f"In PCA space, forget centroid moved {100.0 * kif_metrics_pca['d_toward_unknown']:.1f}% "
-                "of the PRE forget-to-unknown centroid distance along the target direction."
-            ),
+            "interpretation": f"In PCA space, forget centroid moved {100.0 * kif_metrics_pca['d_toward_unknown']:.1f}% of the PRE forget-to-unknown centroid distance along the target direction.",
         },
         "baseline": {
             "artifact": baseline_path,
             "preferred_baseline": args.baseline_prefer,
             "pca_space": baseline_metrics_pca,
             "raw_activation_space": baseline_metrics_raw,
-            "interpretation": (
-                f"In PCA space, forget centroid moved {100.0 * baseline_metrics_pca['d_toward_unknown']:.1f}% "
-                "of the PRE forget-to-unknown centroid distance along the target direction."
-            ),
+            "interpretation": f"In PCA space, forget centroid moved {100.0 * baseline_metrics_pca['d_toward_unknown']:.1f}% of the PRE forget-to-unknown centroid distance along the target direction.",
         },
         "pre": {"artifact": args.model_dir},
         "layer_used": module_name,
         "metric_notes": {
-            "d_total_norm_old": "Norm-only displacement used by the previous script; can be high even for sideways/away movement.",
+            "d_total_norm_old": "Norm-only displacement; can be high for sideways or away movement.",
             "d_toward_unknown": "Signed progress toward the PRE unknown centroid; higher positive is better for this visualization.",
             "d_perpendicular": "Sideways drift orthogonal to the PRE forget-to-unknown direction.",
             "distance_to_pre_unknown": "Remaining centroid distance to PRE unknown, normalized by PRE forget-to-unknown distance; lower is closer.",
@@ -801,14 +679,14 @@ def main() -> None:
         },
         "pca_explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "subjects": subjects,
-        "n_forget_prompts": len(forget_prompts),
-        "n_unknown_prompts": len(unknown_prompts),
-        "n_benign_prompts": len(benign_prompts),
-        "prompt_sets": {"forget": forget_prompts, "unknown": unknown_prompts, "benign": benign_prompts},
+        "n_forget_prompts": len(prompt_sets["forget"]),
+        "n_unknown_prompts": len(prompt_sets["unknown"]),
+        "n_benign_prompts": len(prompt_sets["benign"]),
+        "prompt_sets": prompt_sets,
     }
+
     json_path = out_dir / "centroid_displacement.json"
     json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-
     log(f"Saved PDF: {pdf_path}")
     log(f"Saved PNG: {png_path}")
     log(f"Saved centroid metrics: {json_path}")
