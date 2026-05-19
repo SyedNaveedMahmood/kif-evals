@@ -4,12 +4,15 @@ PCA activation analysis for KIF representation-level erasure.
 
 This standalone script compares activations for:
   1. PRE base model
-  2. POST-KIF model/adaptor
-  3. POST-BASELINE model
+  2. POST-KIF model/adapter
+  3. POST-BASELINE model/adapter
 
-It hooks the exact KIF target module from a capsule's target_module_name unless
---layer_override is provided. It fits PCA on PRE activations only, transforms
-all models into that same PCA space, and reports centroid displacement ratios.
+Important design choices:
+  - The hook module is taken from KIF capsule metadata unless --layer_override is passed.
+  - PCA is fitted on PRE activations only.
+  - Unknown/benign anchor clouds in POST panels are kept fixed to PRE activations.
+  - Movement is reported as *directed progress toward the PRE unknown centroid*, not just
+    Euclidean displacement. This avoids falsely rewarding sideways/away movement.
 """
 
 from __future__ import annotations
@@ -176,11 +179,27 @@ def nearest_smr(path: Path) -> Optional[float]:
 
 
 def manifest_model_path(manifest: Dict[str, Any]) -> Optional[str]:
-    for key in ("merged_model_dir", "model_dir", "adapter_path"):
+    """Return the actual unlearned artifact path from a manifest.
+
+    The earlier implementation preferred model_dir before adapter_path. In this
+    framework, model_dir is often just the original base model, while adapter_path
+    is the actual learned method output. Prefer merged model first, then adapter,
+    and only fall back to model_dir when no output artifact exists.
+    """
+    for key in ("merged_model_dir", "adapter_path", "model_dir"):
         val = manifest.get(key)
         if val:
             return str(val)
     return None
+
+
+def is_peft_adapter_path(path: str, manifest: Optional[Dict[str, Any]] = None) -> bool:
+    p = Path(path)
+    if p.exists() and (p / "adapter_config.json").exists():
+        return True
+    if manifest and manifest.get("adapter_path") and str(manifest.get("adapter_path")) == path:
+        return True
+    return False
 
 
 def discover_unlearning_artifacts(outputs_root: Path) -> Dict[str, List[Dict[str, Any]]]:
@@ -208,6 +227,7 @@ def discover_unlearning_artifacts(outputs_root: Path) -> Dict[str, List[Dict[str
                     if eval_smr is not None:
                         break
         if model_path:
+            selected_is_adapter = is_peft_adapter_path(model_path, obj)
             candidates.append(
                 {
                     "kind": "manifest",
@@ -215,8 +235,8 @@ def discover_unlearning_artifacts(outputs_root: Path) -> Dict[str, List[Dict[str
                     "manifest": str(manifest_path),
                     "method": method or guess_method_from_path(manifest_path),
                     "smr": eval_smr,
-                    "is_adapter": bool(obj.get("adapter_path")),
-                    "is_merged": bool(obj.get("merged_model_dir")),
+                    "is_adapter": selected_is_adapter,
+                    "is_merged": bool(obj.get("merged_model_dir")) and not selected_is_adapter,
                     "raw": obj,
                 }
             )
@@ -317,6 +337,8 @@ def score_baseline_candidate(c: Dict[str, Any], prefer: str = "optout") -> Tuple
         score += 15
     if c.get("is_merged"):
         score += 10
+    if c.get("is_adapter"):
+        score += 5
     smr = c.get("smr")
     smr_val = float(smr) if smr is not None else 999.0
     return (score, -smr_val, str(c.get("path", "")))
@@ -523,36 +545,112 @@ def transform_sets(pca: PCA, sets: Dict[str, np.ndarray]) -> Dict[str, np.ndarra
     return {k: pca.transform(v) for k, v in sets.items()}
 
 
-def displacement_ratio(pre_forget: np.ndarray, pre_unknown: np.ndarray, post_forget: np.ndarray, eps: float = 1e-12) -> float:
+def centroid_metrics(
+    pre_forget: np.ndarray,
+    pre_unknown: np.ndarray,
+    post_forget: np.ndarray,
+    eps: float = 1e-12,
+) -> Dict[str, Any]:
+    """Compute directed centroid movement toward the PRE unknown region.
+
+    d_total is the old norm-only displacement. d_toward_unknown is the signed
+    projection of the movement onto the PRE forget->unknown vector, normalized by
+    the PRE forget-to-unknown distance. Positive means movement toward unknown;
+    negative means movement away. d_perp measures sideways drift.
+    """
     mu_pre_f = pre_forget.mean(axis=0)
     mu_pre_u = pre_unknown.mean(axis=0)
     mu_post_f = post_forget.mean(axis=0)
-    denom = np.linalg.norm(mu_pre_u - mu_pre_f) + eps
-    return float(np.linalg.norm(mu_post_f - mu_pre_f) / denom)
 
+    target = mu_pre_u - mu_pre_f
+    move = mu_post_f - mu_pre_f
+    denom_sq = float(np.dot(target, target)) + eps
+    denom = math.sqrt(denom_sq)
 
-def plot_panel(ax, projected: Dict[str, np.ndarray], title: str, d_value: float, show_legend: bool = False):
-    style = {
-        "forget": {"color": "red", "marker": "o", "alpha": 0.70, "label": "Forget subjects"},
-        "unknown": {"color": "grey", "marker": "^", "alpha": 0.50, "label": "Unknown"},
-        "benign": {"color": "blue", "marker": "s", "alpha": 0.50, "label": "Benign"},
+    d_toward = float(np.dot(move, target) / denom_sq)
+    parallel = d_toward * target
+    residual = move - parallel
+
+    d_total = float(np.linalg.norm(move) / denom)
+    d_perp = float(np.linalg.norm(residual) / denom)
+    dist_to_unknown = float(np.linalg.norm(mu_post_f - mu_pre_u) / denom)
+
+    return {
+        "d_total_norm_old": d_total,
+        "d_toward_unknown": d_toward,
+        "d_perpendicular": d_perp,
+        "distance_to_pre_unknown": dist_to_unknown,
+        "mu_pre_forget": mu_pre_f.tolist(),
+        "mu_pre_unknown": mu_pre_u.tolist(),
+        "mu_post_forget": mu_post_f.tolist(),
     }
-    for key in ("forget", "unknown", "benign"):
-        arr = projected[key]
-        st = style[key]
-        ax.scatter(arr[:, 0], arr[:, 1], c=st["color"], marker=st["marker"], alpha=st["alpha"], s=32,
-                   label=st["label"] if show_legend else None, linewidths=0.0)
-        centroid = arr.mean(axis=0)
-        ax.scatter(centroid[0], centroid[1], c=st["color"], marker=st["marker"], s=150,
-                   edgecolors="black", linewidths=1.2)
+
+
+def set_shared_limits(axes, arrays: List[np.ndarray], pad_frac: float = 0.08) -> None:
+    points = np.concatenate(arrays, axis=0)
+    xmin, ymin = points.min(axis=0)
+    xmax, ymax = points.max(axis=0)
+    xpad = max(1e-6, (xmax - xmin) * pad_frac)
+    ypad = max(1e-6, (ymax - ymin) * pad_frac)
+    for ax in axes:
+        ax.set_xlim(xmin - xpad, xmax + xpad)
+        ax.set_ylim(ymin - ypad, ymax + ypad)
+
+
+def plot_panel(
+    ax,
+    pre_projected: Dict[str, np.ndarray],
+    title: str,
+    metrics: Optional[Dict[str, Any]] = None,
+    post_forget: Optional[np.ndarray] = None,
+    show_legend: bool = False,
+) -> None:
+    # In POST panels, unknown and benign are intentionally PRE anchors.
+    forget = pre_projected["forget"] if post_forget is None else post_forget
+    unknown = pre_projected["unknown"]
+    benign = pre_projected["benign"]
+
+    ax.scatter(unknown[:, 0], unknown[:, 1], c="grey", marker="^", alpha=0.35, s=32,
+               label="Unknown anchor (PRE)" if show_legend else None, linewidths=0.0)
+    ax.scatter(benign[:, 0], benign[:, 1], c="blue", marker="s", alpha=0.45, s=32,
+               label="Benign anchor (PRE)" if show_legend else None, linewidths=0.0)
+    ax.scatter(forget[:, 0], forget[:, 1], c="red", marker="o", alpha=0.72, s=32,
+               label="Forget subjects" if show_legend else None, linewidths=0.0)
+
+    mu_pre_f = pre_projected["forget"].mean(axis=0)
+    mu_u = unknown.mean(axis=0)
+    mu_b = benign.mean(axis=0)
+    mu_f = forget.mean(axis=0)
+
+    ax.scatter(mu_u[0], mu_u[1], c="grey", marker="^", s=150, edgecolors="black", linewidths=1.2)
+    ax.scatter(mu_b[0], mu_b[1], c="blue", marker="s", s=150, edgecolors="black", linewidths=1.2)
+    ax.scatter(mu_f[0], mu_f[1], c="red", marker="o", s=150, edgecolors="black", linewidths=1.2)
+
+    if post_forget is not None:
+        ax.scatter(mu_pre_f[0], mu_pre_f[1], facecolors="none", edgecolors="red", marker="o", s=180,
+                   linewidths=1.6, label="Pre forget centroid" if show_legend else None)
+        ax.annotate("", xy=(mu_f[0], mu_f[1]), xytext=(mu_pre_f[0], mu_pre_f[1]),
+                    arrowprops=dict(arrowstyle="->", lw=1.8, color="red", alpha=0.85))
+        ax.annotate("", xy=(mu_u[0], mu_u[1]), xytext=(mu_pre_f[0], mu_pre_f[1]),
+                    arrowprops=dict(arrowstyle="-->", lw=1.0, color="grey", alpha=0.45))
+
     ax.set_title(title, fontsize=13)
     ax.set_xlabel("PC1", fontsize=11)
     ax.set_ylabel("PC2", fontsize=11)
     ax.grid(True, alpha=0.2)
-    ax.text(0.04, 0.94, f"d={d_value:.2f}", transform=ax.transAxes, fontsize=12, va="top", ha="left",
+
+    if metrics is None:
+        text = "d→=0.00\nd⊥=0.00"
+    else:
+        text = (
+            f"d→={metrics['d_toward_unknown']:.2f}\n"
+            f"d⊥={metrics['d_perpendicular']:.2f}\n"
+            f"distU={metrics['distance_to_pre_unknown']:.2f}"
+        )
+    ax.text(0.04, 0.94, text, transform=ax.transAxes, fontsize=11, va="top", ha="left",
             bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="black", alpha=0.85))
     if show_legend:
-        ax.legend(frameon=True, fontsize=10, loc="best")
+        ax.legend(frameon=True, fontsize=9, loc="best")
 
 
 def free_model(model) -> None:
@@ -638,16 +736,32 @@ def main() -> None:
     kif_proj = transform_sets(pca, kif_acts)
     baseline_proj = transform_sets(pca, baseline_acts)
 
-    d_pre = 0.0
-    d_kif = displacement_ratio(pre_acts["forget"], pre_acts["unknown"], kif_acts["forget"])
-    d_baseline = displacement_ratio(pre_acts["forget"], pre_acts["unknown"], baseline_acts["forget"])
+    zero_metrics = {
+        "d_total_norm_old": 0.0,
+        "d_toward_unknown": 0.0,
+        "d_perpendicular": 0.0,
+        "distance_to_pre_unknown": 1.0,
+    }
+    kif_metrics_raw = centroid_metrics(pre_acts["forget"], pre_acts["unknown"], kif_acts["forget"])
+    baseline_metrics_raw = centroid_metrics(pre_acts["forget"], pre_acts["unknown"], baseline_acts["forget"])
+    kif_metrics_pca = centroid_metrics(pre_proj["forget"], pre_proj["unknown"], kif_proj["forget"])
+    baseline_metrics_pca = centroid_metrics(pre_proj["forget"], pre_proj["unknown"], baseline_proj["forget"])
 
     plt.rcParams.update({"figure.facecolor": "white", "axes.facecolor": "white", "savefig.facecolor": "white", "font.size": 11})
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    plot_panel(axes[0], pre_proj, "Pre-Unlearning", d_pre, show_legend=True)
-    plot_panel(axes[1], kif_proj, f"Post-KIF (d={d_kif:.2f})", d_kif, show_legend=False)
-    plot_panel(axes[2], baseline_proj, f"Post-Baseline (d={d_baseline:.2f})", d_baseline, show_legend=False)
-    fig.suptitle("Activation Space PCA — Representation-Level Erasure", fontsize=15)
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    plot_panel(axes[0], pre_proj, "Pre-Unlearning", metrics=zero_metrics, post_forget=None, show_legend=True)
+    plot_panel(axes[1], pre_proj, f"Post-KIF (d→={kif_metrics_pca['d_toward_unknown']:.2f})",
+               metrics=kif_metrics_pca, post_forget=kif_proj["forget"], show_legend=False)
+    plot_panel(axes[2], pre_proj, f"Post-Baseline (d→={baseline_metrics_pca['d_toward_unknown']:.2f})",
+               metrics=baseline_metrics_pca, post_forget=baseline_proj["forget"], show_legend=False)
+    set_shared_limits(
+        axes,
+        [
+            pre_proj["forget"], pre_proj["unknown"], pre_proj["benign"],
+            kif_proj["forget"], baseline_proj["forget"],
+        ],
+    )
+    fig.suptitle("Activation Space PCA — Directed Movement Toward PRE Unknown Anchor", fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
 
     pdf_path = out_dir / "pca_activation_space.pdf"
@@ -658,18 +772,33 @@ def main() -> None:
 
     result = {
         "kif": {
-            "d": d_kif,
-            "interpretation": f"forget cluster moved {100.0 * d_kif:.1f}% of the PRE forget-to-unknown centroid distance",
             "artifact": kif_path,
+            "pca_space": kif_metrics_pca,
+            "raw_activation_space": kif_metrics_raw,
+            "interpretation": (
+                f"In PCA space, forget centroid moved {100.0 * kif_metrics_pca['d_toward_unknown']:.1f}% "
+                "of the PRE forget-to-unknown centroid distance along the target direction."
+            ),
         },
         "baseline": {
-            "d": d_baseline,
-            "interpretation": f"forget cluster moved {100.0 * d_baseline:.1f}% of the PRE forget-to-unknown centroid distance",
             "artifact": baseline_path,
             "preferred_baseline": args.baseline_prefer,
+            "pca_space": baseline_metrics_pca,
+            "raw_activation_space": baseline_metrics_raw,
+            "interpretation": (
+                f"In PCA space, forget centroid moved {100.0 * baseline_metrics_pca['d_toward_unknown']:.1f}% "
+                "of the PRE forget-to-unknown centroid distance along the target direction."
+            ),
         },
-        "pre": {"d": d_pre, "artifact": args.model_dir},
+        "pre": {"artifact": args.model_dir},
         "layer_used": module_name,
+        "metric_notes": {
+            "d_total_norm_old": "Norm-only displacement used by the previous script; can be high even for sideways/away movement.",
+            "d_toward_unknown": "Signed progress toward the PRE unknown centroid; higher positive is better for this visualization.",
+            "d_perpendicular": "Sideways drift orthogonal to the PRE forget-to-unknown direction.",
+            "distance_to_pre_unknown": "Remaining centroid distance to PRE unknown, normalized by PRE forget-to-unknown distance; lower is closer.",
+            "post_panel_anchors": "Unknown and benign clouds are fixed PRE anchors in all panels.",
+        },
         "pca_explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "subjects": subjects,
         "n_forget_prompts": len(forget_prompts),
