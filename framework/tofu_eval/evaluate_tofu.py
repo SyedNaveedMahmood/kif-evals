@@ -6,6 +6,12 @@ Reporting follows the TOFU/SimNPO convention used in KIF discussions:
   - Forget Quality / FQ = linear KS-test p-value, not log(p-value)
   - Model Utility / MU = harmonic mean over non-forget utility metrics
   - Truth Ratio = wrong/correct using official TOFU perturbed datasets
+
+Retain-reference handling:
+  Publication-grade FQ requires truth-ratio logs from a true retain-only model
+  for the same TOFU split. This file accepts either this repo's
+  retain_reference_logs.json format or OpenUnlearning-style TOFU_EVAL.json logs
+  as long as truth-ratio values can be extracted.
 """
 
 from __future__ import annotations
@@ -139,14 +145,112 @@ def _load_retain_reference(path: str) -> Optional[Dict[str, Any]]:
     return json.loads(p.read_text(encoding="utf-8"))
 
 
+def _numeric_list(x: Any) -> List[float]:
+    out: List[float] = []
+    if isinstance(x, list):
+        for item in x:
+            try:
+                v = float(item)
+                if v == v:
+                    out.append(v)
+            except Exception:
+                pass
+    return out
+
+
+def _values_from_any_metric(obj: Any) -> List[float]:
+    """Extract truth-ratio score arrays from either our or OpenUnlearning logs."""
+    if obj is None:
+        return []
+
+    nums = _numeric_list(obj)
+    if nums:
+        return nums
+
+    if isinstance(obj, dict):
+        if "truth_ratio_values" in obj:
+            vals = _numeric_list(obj.get("truth_ratio_values"))
+            if vals:
+                return vals
+
+        if "value_by_index" in obj and isinstance(obj["value_by_index"], dict):
+            vals: List[float] = []
+            for v in obj["value_by_index"].values():
+                if isinstance(v, dict):
+                    for key in ("score", "truth_ratio", "value", "agg_value"):
+                        if key in v:
+                            try:
+                                f = float(v[key])
+                                if f == f:
+                                    vals.append(f)
+                                    break
+                            except Exception:
+                                pass
+                else:
+                    try:
+                        f = float(v)
+                        if f == f:
+                            vals.append(f)
+                    except Exception:
+                        pass
+            if vals:
+                return vals
+
+        # Common OpenUnlearning shape can store values under access keys such as
+        # retain/forget/correct/wrong; recurse but prefer retain when present.
+        for preferred in ("retain", "forget_truth_ratio", "forget", "truth_ratio"):
+            if preferred in obj:
+                vals = _values_from_any_metric(obj[preferred])
+                if vals:
+                    return vals
+
+    return []
+
+
+def extract_retain_reference_values(retain_reference: Dict[str, Any]) -> List[float]:
+    """Return retain-model forget truth-ratio values from supported log formats.
+
+    Supported formats:
+    1. This repo's retain_reference_logs.json:
+       {"truth_ratio_values": [...]} or {"forget_truth_ratio": {"value_by_index": ...}}
+    2. OpenUnlearning-style nested TOFU_EVAL.json logs, where the relevant values
+       are under keys containing truth_ratio / forget_truth_ratio / retain.
+    """
+    direct = _values_from_any_metric(retain_reference)
+    if direct:
+        return direct
+
+    hits: List[Any] = []
+
+    def walk(obj: Any, path: str = "") -> None:
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                k_str = str(k).lower()
+                new_path = f"{path}.{k_str}" if path else k_str
+                if "truth_ratio" in k_str or "forget_quality" in k_str:
+                    hits.append(v)
+                walk(v, new_path)
+        elif isinstance(obj, list):
+            for item in obj:
+                walk(item, path)
+
+    walk(retain_reference)
+    for h in hits:
+        vals = _values_from_any_metric(h)
+        if vals:
+            return vals
+    return []
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model_dir", required=True)
+    ap.add_argument("--model_dir", default="", help="Model/checkpoint to evaluate. Not required for --validate_retain_logs_only.")
     ap.add_argument("--data_dir", default="framework/outputs/tofu/data")
     ap.add_argument("--split", default="forget10", choices=["forget01", "forget05", "forget10"])
-    ap.add_argument("--output_dir", required=True)
+    ap.add_argument("--output_dir", default="")
     ap.add_argument("--retain_logs", default="")
     ap.add_argument("--write_retain_logs", action="store_true", help="Write current model's forget truth-ratio as retain reference logs.")
+    ap.add_argument("--validate_retain_logs_only", action="store_true", help="Validate --retain_logs and exit before loading any model.")
     ap.add_argument("--model_family", default="llama3.1-8b")
     ap.add_argument("--max_length", type=int, default=512)
     ap.add_argument("--max_new_tokens", type=int, default=64)
@@ -157,6 +261,23 @@ def main() -> None:
     ap.add_argument("--use_4bit", action="store_true")
     ap.add_argument("--device_map_auto", action="store_true")
     args = ap.parse_args()
+
+    if args.validate_retain_logs_only:
+        if not args.retain_logs:
+            raise SystemExit("--validate_retain_logs_only requires --retain_logs")
+        retain_reference = _load_retain_reference(args.retain_logs)
+        if retain_reference is None:
+            raise SystemExit(f"Retain logs not found: {args.retain_logs}")
+        ref_vals = extract_retain_reference_values(retain_reference)
+        if not ref_vals:
+            raise SystemExit(f"Could not extract retain truth-ratio values from: {args.retain_logs}")
+        print(json.dumps({"retain_logs": args.retain_logs, "num_truth_ratio_values": len(ref_vals)}, indent=2))
+        return
+
+    if not args.model_dir:
+        raise SystemExit("--model_dir is required unless --validate_retain_logs_only is set")
+    if not args.output_dir:
+        raise SystemExit("--output_dir is required unless --validate_retain_logs_only is set")
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -201,11 +322,9 @@ def main() -> None:
 
     ks = {"statistic": float("nan"), "pvalue": float("nan")}
     if retain_reference is not None:
-        if "truth_ratio_values" in retain_reference:
-            ref_vals = retain_reference["truth_ratio_values"]
-        else:
-            ref_metric = retain_reference.get("forget_truth_ratio") or retain_reference.get("metrics", {}).get("forget", {}).get("truth_ratio")
-            ref_vals = values_from_metric(ref_metric, "score") if ref_metric else []
+        ref_vals = extract_retain_reference_values(retain_reference)
+        if not ref_vals:
+            raise RuntimeError(f"Retain logs were provided but no truth-ratio values could be extracted: {args.retain_logs}")
         # SimNPO/KIF reporting uses the direct linear KS p-value on raw truth ratios.
         ks = ks_test(current_forget_tr, ref_vals, inverse=False)
     else:
