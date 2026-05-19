@@ -67,6 +67,7 @@ python -u analysis/rwku_style_entity_robustness.py \
   --smoke_test
 
 # Checkpointed dev run. Re-submit this same job until completion shows eval_remaining=0.
+# These caps are safe after the first 90-row run completed in about 20 minutes.
 python -u analysis/rwku_style_entity_robustness.py \
   --model_dir meta-llama/Llama-3.1-8B \
   --kif_adapter_path "$KIF_ADAPTER_PATH" \
@@ -78,9 +79,9 @@ python -u analysis/rwku_style_entity_robustness.py \
   --load_mode 4bit \
   --max_subjects 11 \
   --rows_per_family_cap 0 \
-  --max_eval_rows_per_model 90 \
-  --max_teacher_rows 120 \
-  --max_mia_rows_per_model 120 \
+  --max_eval_rows_per_model 120 \
+  --max_teacher_rows 180 \
+  --max_mia_rows_per_model 180 \
   --mia_max_pairs 500 \
   --max_new_tokens 48 \
   --el_steps 8 \
