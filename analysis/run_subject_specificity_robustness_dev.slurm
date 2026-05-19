@@ -66,16 +66,16 @@ if [[ ! -d "$BASELINE_OUTPUTS_ROOT" ]]; then
   exit 2
 fi
 
-python3 -c "import ast; ast.parse(open('analysis/subject_specificity_robustness_suite.py').read()); print('Subject-specificity robustness suite syntax OK')"
+python3 -c "import ast; ast.parse(open('analysis/subject_specificity_robustness_suite.py').read()); ast.parse(open('analysis/subject_specificity_robustness_suite_fixed.py').read()); print('Subject-specificity robustness suite syntax OK')"
 
 # Fast internal smoke tests only; no model loading.
-python -u analysis/subject_specificity_robustness_suite.py \
+python -u analysis/subject_specificity_robustness_suite_fixed.py \
   --model_dir meta-llama/Llama-3.1-8B \
   --out_dir "$OUT_DIR" \
   --smoke_test
 
 # Full dev-GPU run.
-python -u analysis/subject_specificity_robustness_suite.py \
+python -u analysis/subject_specificity_robustness_suite_fixed.py \
   --model_dir meta-llama/Llama-3.1-8B \
   --kif_adapter_path "$KIF_ADAPTER_PATH" \
   --capsules_dir "$KIF_CAPSULES_DIR" \
