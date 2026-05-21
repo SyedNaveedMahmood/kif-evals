@@ -17,11 +17,10 @@ LLMRUN=/pfs/work9/workspace/scratch/hd_ur228-llmrun
 SRC="$LLMRUN/src"
 PCA="$LLMRUN/src_pca"
 
-# The script is defensive and accepts multiple roots. It will discover existing
-# capsule/signature artifacts recursively and filter to the 11 KIF subjects.
-CAPSULE_ROOT_APP="$SRC/app/outputs/capsules"
-CAPSULE_ROOT_APP_OUTPUTS="$SRC/app/outputs"
-CAPSULE_ROOT_FRAMEWORK="$SRC/framework/outputs"
+# Keep the scan narrow. The previous broad scan over app/outputs and
+# framework/outputs can discover tens of thousands of activation/cache files and
+# time out before the actual analysis starts.
+CAPSULE_ROOT="${CAPSULE_ROOT:-$SRC/app/outputs/capsules}"
 OUT_DIR="$PCA/analysis/outputs_real_negative_signature_separability"
 
 source "$LLMRUN/llm_env/bin/activate"
@@ -39,10 +38,20 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
 echo "[REAL-NEG-SEP] Running from: $(pwd)"
-echo "[REAL-NEG-SEP] Capsule root app: $CAPSULE_ROOT_APP"
-echo "[REAL-NEG-SEP] Capsule root app outputs: $CAPSULE_ROOT_APP_OUTPUTS"
-echo "[REAL-NEG-SEP] Capsule root framework: $CAPSULE_ROOT_FRAMEWORK"
+echo "[REAL-NEG-SEP] Capsule root: $CAPSULE_ROOT"
 echo "[REAL-NEG-SEP] Output directory: $OUT_DIR"
+
+if [[ ! -d "$CAPSULE_ROOT" ]]; then
+  echo "[REAL-NEG-SEP][ERROR] Missing capsule root: $CAPSULE_ROOT" >&2
+  echo "Set CAPSULE_ROOT=/path/to/outputs/capsules when submitting if your capsules are elsewhere." >&2
+  exit 2
+fi
+
+echo "[REAL-NEG-SEP] Candidate capsule/signature file count under root:"
+find "$CAPSULE_ROOT" -type f \( \
+  -name '*.pkl' -o -name '*.pkl.gz' -o -name '*.pickle' -o -name '*.pickle.gz' -o \
+  -name '*.pt' -o -name '*.pth' -o -name '*.json' -o -name '*.json.gz' \
+\) | grep -Ei 'capsule|signature|module_c|miner' | wc -l
 
 python3 -c "import ast; ast.parse(open('analysis/real_negative_signature_separability.py').read()); print('Real-negative separability syntax OK')"
 
@@ -52,9 +61,7 @@ python -u analysis/real_negative_signature_separability.py \
 
 python -u analysis/real_negative_signature_separability.py \
   --model_dir meta-llama/Llama-3.1-8B \
-  --capsules_root "$CAPSULE_ROOT_APP" \
-  --capsules_root "$CAPSULE_ROOT_APP_OUTPUTS" \
-  --capsules_root "$CAPSULE_ROOT_FRAMEWORK" \
+  --capsules_root "$CAPSULE_ROOT" \
   --prefer_path_contains capsule \
   --out_dir "$OUT_DIR" \
   --load_mode 4bit \
