@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
-"""Compare Gaussian-negative vs real-negative signature mining on cached KIF activations.
+"""Compare Gaussian-negative vs cross-subject real-negative signature mining.
 
 This is an evaluation-only Module-C-style diagnostic. It does not load an LLM and
 it does not train. It uses saved activations, mines two directions per
-(subject, layer), and evaluates both on the same held-out real controls.
+(subject, layer), and evaluates both directions on the same held-out real
+cross-subject controls.
 
 Direction A: Gaussian/synthetic negative mining
-  pos_train vs synthetic negatives generated from pos_train
+  target_subject_train vs synthetic negatives generated from target_subject_train
 
 Direction B: Real-negative mining
-  pos_train vs real_control_train
+  target_subject_train vs positive prompts from other subjects
 
 Both are evaluated on:
-  pos_eval vs real_control_eval
+  target_subject_eval vs held-out positive prompts from other subjects
+
+Example:
+  Taylor Swift positives vs Ariana Grande/Beyonce/Eminem/... positives as real negatives.
+  Beyonce positives vs Taylor Swift/Ariana Grande/Kanye West/... positives as real negatives.
 
 Outputs:
   per_layer_metrics.csv
+  paired_deltas.csv
+  skipped.json
   gaussian_vs_real_negative_signature_summary.json
 """
 
@@ -82,6 +89,7 @@ def dump_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
 def load_pickle_any(path: str):
     p = Path(path)
     if not p.exists():
+        # Activation index may contain paths relative to the original cwd. Try as-is first only.
         return None
     try:
         if str(p).endswith(".gz"):
@@ -149,7 +157,6 @@ def process_activation(x: Any, strategy: str = "mean_token") -> Optional[np.ndar
 
 
 def select_path(paths: Sequence[str], layer: int, target_module: str) -> Optional[str]:
-    # Prefer exact layer marker and module marker. This mirrors the old Module C path search.
     layer_patterns = [f"layer{layer}_", f"layer_{layer}_", f"layer.{layer}.", f"layers.{layer}."]
     candidates = []
     for p in paths:
@@ -158,7 +165,6 @@ def select_path(paths: Sequence[str], layer: int, target_module: str) -> Optiona
             candidates.append(p)
     if candidates:
         return sorted(candidates, key=len)[0]
-    # Fallback: layer match only.
     for p in paths:
         low = str(p).lower()
         if any(lp in low for lp in layer_patterns):
@@ -260,7 +266,6 @@ def auc_rank(pos_scores: Sequence[float], neg_scores: Sequence[float]) -> float:
 def eval_direction(name: str, model: Dict[str, np.ndarray], pos_eval: Sequence[np.ndarray], neg_eval: Sequence[np.ndarray]) -> Dict[str, Any]:
     ps = project(model, pos_eval)
     ns = project(model, neg_eval)
-    # Orient evaluation so positive mean is higher. This avoids arbitrary sign flips.
     if len(ps) and len(ns) and ps.mean() < ns.mean():
         ps, ns = -ps, -ns
     return {
@@ -285,6 +290,15 @@ def split_items(items: List[Dict[str, Any]], train_frac: float, seed: int) -> Tu
     return arr[:n_train], arr[n_train:]
 
 
+def cap_items(items: List[Dict[str, Any]], cap: int, seed: int) -> List[Dict[str, Any]]:
+    if cap <= 0 or len(items) <= cap:
+        return list(items)
+    rng = random.Random(seed)
+    arr = list(items)
+    rng.shuffle(arr)
+    return arr[:cap]
+
+
 def group_prompts(activation_index: Dict[str, Any], prompts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     pdata = {str(p.get("id")): p for p in prompts if p.get("id") is not None}
     groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -304,6 +318,23 @@ def group_prompts(activation_index: Dict[str, Any], prompts: List[Dict[str, Any]
             "raw": p,
         })
     return groups
+
+
+def get_positive_like(items: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [x for x in items if x["class"] in ("positive", "unknown")]
+
+
+def get_real_negative_items(subject: str, subjects: Sequence[str], groups: Dict[str, List[Dict[str, Any]]], source: str) -> List[Dict[str, Any]]:
+    if source == "cross_subject_positive":
+        neg: List[Dict[str, Any]] = []
+        for other in subjects:
+            if other == subject:
+                continue
+            neg.extend(get_positive_like(groups.get(other, [])))
+        return neg
+    if source == "metadata_control":
+        return [x for x in groups.get(subject, []) if x["class"] == "control"]
+    raise ValueError(f"Unknown real_negative_source: {source}")
 
 
 def run(args: argparse.Namespace) -> Dict[str, Any]:
@@ -327,19 +358,36 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     layers = [int(x) for x in args.layers.split(",") if x.strip()]
     log(f"Subjects: {len(subjects)} {subjects}")
     log(f"Layers: {layers} target_module={args.target_module}")
+    log(f"Real negative source: {args.real_negative_source}")
+    log(f"Caps: pos_train={args.max_pos_train}, pos_eval={args.max_pos_eval}, real_train={args.max_real_neg_train}, real_eval={args.max_real_neg_eval}")
 
     rows: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
 
     for si, subject in enumerate(subjects):
-        items = groups[subject]
-        pos_items = [x for x in items if x["class"] in ("positive", "unknown")]
-        neg_items = [x for x in items if x["class"] == "control"]
-        if len(pos_items) < args.min_pos_total or len(neg_items) < args.min_neg_total:
-            skipped.append({"subject": subject, "reason": "too_few_prompt_rows", "n_pos": len(pos_items), "n_control": len(neg_items)})
+        pos_items_all = get_positive_like(groups[subject])
+        real_neg_items_all = get_real_negative_items(subject, subjects, groups, args.real_negative_source)
+        if len(pos_items_all) < args.min_pos_total or len(real_neg_items_all) < args.min_neg_total:
+            skipped.append({
+                "subject": subject,
+                "reason": "too_few_prompt_rows",
+                "real_negative_source": args.real_negative_source,
+                "n_pos": len(pos_items_all),
+                "n_real_neg_candidate": len(real_neg_items_all),
+            })
             continue
-        pos_train_items, pos_eval_items = split_items(pos_items, args.train_frac, args.seed + si)
-        neg_train_items, neg_eval_items = split_items(neg_items, args.train_frac, args.seed + 1000 + si)
+
+        pos_train_items, pos_eval_items = split_items(pos_items_all, args.train_frac, args.seed + si)
+        neg_train_items, neg_eval_items = split_items(real_neg_items_all, args.train_frac, args.seed + 1000 + si)
+        pos_train_items = cap_items(pos_train_items, args.max_pos_train, args.seed + 10_000 + si)
+        pos_eval_items = cap_items(pos_eval_items, args.max_pos_eval, args.seed + 20_000 + si)
+        neg_train_items = cap_items(neg_train_items, args.max_real_neg_train, args.seed + 30_000 + si)
+        neg_eval_items = cap_items(neg_eval_items, args.max_real_neg_eval, args.seed + 40_000 + si)
+
+        log(
+            f"Subject={subject} pos_all={len(pos_items_all)} real_neg_all={len(real_neg_items_all)} "
+            f"train/eval pos={len(pos_train_items)}/{len(pos_eval_items)} neg={len(neg_train_items)}/{len(neg_eval_items)}"
+        )
 
         for layer in layers:
             pos_train = load_features(pos_train_items, layer, args.target_module, args.activation_strategy)
@@ -350,6 +398,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             if len(pos_train) < args.min_pos_train or len(pos_eval) < args.min_pos_eval or len(real_train) < args.min_neg_train or len(real_eval) < args.min_neg_eval:
                 skipped.append({
                     "subject": subject, "layer": layer, "reason": "too_few_activations",
+                    "real_negative_source": args.real_negative_source,
                     "pos_train": len(pos_train), "pos_eval": len(pos_eval),
                     "real_train": len(real_train), "real_eval": len(real_eval),
                 })
@@ -368,6 +417,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                 "subject": subject,
                 "layer": layer,
                 "target_module": args.target_module,
+                "real_negative_source": args.real_negative_source,
+                "n_pos_total": len(pos_items_all),
+                "n_real_neg_candidate": len(real_neg_items_all),
                 "n_pos_train": len(pos_train),
                 "n_real_train": len(real_train),
                 "n_gauss_train": len(gauss_neg),
@@ -414,8 +466,12 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "n_subjects_available": len(groups),
             "n_subjects_evaluated": len(subjects),
             "layers": layers,
+            "real_negative_source": args.real_negative_source,
             "prompt_group_counts": {
                 s: dict(Counter(x["class"] for x in groups[s])) for s in subjects
+            },
+            "cross_subject_real_negative_candidates": {
+                s: len(get_real_negative_items(s, subjects, groups, args.real_negative_source)) for s in subjects
             },
         },
         "completion": {
@@ -433,8 +489,8 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "mean_d_delta_gauss_minus_real": float(np.nanmean([x["d_delta_gauss_minus_real"] for x in deltas])) if deltas else None,
         },
         "interpretation": {
-            "supportive": "Gaussian-mined signatures are defensible if their held-out real-control AUC/Cohen's d are comparable to real-negative-mined signatures.",
-            "weak": "If Gaussian-mined signatures are much weaker, frame Gaussian negatives as a corpus-agnostic baseline and real negatives as a future/locality-aware improvement.",
+            "supportive": "Gaussian-mined signatures are defensible if their held-out cross-subject real-negative AUC/Cohen's d are comparable to real-negative-mined signatures.",
+            "weak": "If Gaussian-mined signatures are much weaker, frame Gaussian negatives as a corpus-agnostic baseline and cross-subject real negatives as a future/locality-aware improvement.",
         },
     }
     dump_json(out_dir / "gaussian_vs_real_negative_signature_summary.json", summary)
@@ -462,13 +518,18 @@ def main() -> None:
     ap.add_argument("--layers", default="9,10,11,12")
     ap.add_argument("--target_module", default="mlp")
     ap.add_argument("--activation_strategy", default="mean_token", choices=["mean_token", "last_token"])
+    ap.add_argument("--real_negative_source", default="cross_subject_positive", choices=["cross_subject_positive", "metadata_control"])
     ap.add_argument("--train_frac", type=float, default=0.6)
+    ap.add_argument("--max_pos_train", type=int, default=64)
+    ap.add_argument("--max_pos_eval", type=int, default=64)
+    ap.add_argument("--max_real_neg_train", type=int, default=128)
+    ap.add_argument("--max_real_neg_eval", type=int, default=128)
     ap.add_argument("--min_pos_total", type=int, default=4)
-    ap.add_argument("--min_neg_total", type=int, default=3)
+    ap.add_argument("--min_neg_total", type=int, default=4)
     ap.add_argument("--min_pos_train", type=int, default=2)
     ap.add_argument("--min_pos_eval", type=int, default=2)
-    ap.add_argument("--min_neg_train", type=int, default=1)
-    ap.add_argument("--min_neg_eval", type=int, default=1)
+    ap.add_argument("--min_neg_train", type=int, default=2)
+    ap.add_argument("--min_neg_eval", type=int, default=2)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--smoke_test", action="store_true")
     args = ap.parse_args()
