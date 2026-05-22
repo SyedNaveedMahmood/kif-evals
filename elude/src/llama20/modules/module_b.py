@@ -1,11 +1,19 @@
 # Module B: Activation Probing (Hooks-in-Parallel + Batching)
 # -----------------------------------------------------------
-# One forward pass per batch captures ALL target layers via hooks, then saves
-# per-prompt, per-layer activations to disk. This removes the O(num_layers)
-# forward-pass bottleneck and fully utilizes the GPU with batching.
+# One forward pass per batch captures the target MLP block outputs via hooks,
+# then saves per-prompt, per-layer activations to disk.
 #
-# 3090/ELUDe fast defaults:
+# IMPORTANT FIX:
+#   Matching module names by substring "mlp" also captures internal Llama MLP
+#   projections such as gate_proj/up_proj whose output dimension is the
+#   intermediate size (14336 for Llama-3.1-8B). Module C/D require the residual
+#   hidden dimension (4096). Therefore, the default target selection now hooks
+#   ONLY the exact layer MLP block, i.e. names ending in ".mlp". If you override
+#   KIF_PROBE_TARGETS, matching is exact on the final module-name component.
+#
+# 3090/ELUDe defaults:
 #   KIF_PROBE_LAYERS=11,12,13,14
+#   KIF_PROBE_TARGETS=mlp
 #   KIF_PROBE_BATCH_SIZE=16
 #   KIF_PROBE_CAPTURE_SCOPE=last_token|full
 #   KIF_PROBE_COMPRESSION_LEVEL=1
@@ -20,7 +28,7 @@ import json
 import time
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Any
 from dataclasses import dataclass, field
 from collections import defaultdict
 
@@ -96,13 +104,24 @@ def _parse_layers(raw: str | None, default: List[int]) -> List[int]:
     return sorted(set(out)) or list(default)
 
 
+def _is_exact_target_module(module_name: str, targets: List[str]) -> bool:
+    """Return True only for exact final-component target matches.
+
+    This intentionally avoids substring matching. For example, target "mlp"
+    matches "model.layers.11.mlp" but NOT
+    "model.layers.11.mlp.gate_proj" or "model.layers.11.mlp.up_proj".
+    """
+    final_component = module_name.split(".")[-1].lower()
+    target_set = {t.lower() for t in targets}
+    return final_component in target_set
+
+
 @dataclass
 class ProbeConfig:
     model_dir: str = "outputs/model"
     prompts_file: str = "outputs/datasets/prompts.jsonl"
     output_dir: Path = Path("outputs/activations")
 
-    # ELUDe/3090 default is deliberately restricted to KIF middle MLP layers.
     layers: List[int] = field(default_factory=lambda: _parse_layers(os.getenv("KIF_PROBE_LAYERS"), [11, 12, 13, 14]))
     targets: List[str] = field(default_factory=lambda: [x.strip() for x in os.getenv("KIF_PROBE_TARGETS", "mlp").split(",") if x.strip()])
 
@@ -114,11 +133,8 @@ class ProbeConfig:
 
     device_map: str = field(default_factory=lambda: os.getenv("KIF_PROBE_DEVICE_MAP", "auto"))
     cleanup_every_batches: int = field(default_factory=lambda: _env_int("KIF_PROBE_CLEANUP_EVERY", 25))
-
-    # gzip level 1 is much faster; activation files are already fp16.
     compression_level: int = field(default_factory=lambda: _env_int("KIF_PROBE_COMPRESSION_LEVEL", 1))
 
-    # "last_token" is much smaller/faster on disk; "full" preserves old behavior.
     capture_scope: str = field(default_factory=lambda: os.getenv("KIF_PROBE_CAPTURE_SCOPE", "last_token"))
     skip_existing: bool = field(default_factory=lambda: _env_bool("KIF_PROBE_SKIP_EXISTING", True))
 
@@ -127,6 +143,8 @@ class ProbeConfig:
         (self.output_dir / "mlp").mkdir(parents=True, exist_ok=True)
         if self.capture_scope not in {"full", "last_token"}:
             raise ValueError("KIF_PROBE_CAPTURE_SCOPE must be 'full' or 'last_token'")
+        if not self.targets:
+            raise ValueError("KIF_PROBE_TARGETS resolved to an empty list")
 
 
 def get_primary_device(model: nn.Module) -> torch.device:
@@ -160,21 +178,30 @@ class ParallelActivationCollector:
 
     def _discover_targets(self) -> None:
         names = []
-        for name, module in self.model.named_modules():
-            lname = name.lower()
-            if any(t in lname for t in self.config.targets):
-                m = re.search(r"layers\.(\d+)", name)
-                if not m:
-                    continue
-                layer_idx = int(m.group(1))
-                if layer_idx in self.config.layers:
-                    names.append((layer_idx, name))
-        names.sort(key=lambda x: (x[0], x[1]))
-        self.target_module_names = [n for _, n in names]
-        self.module_to_layer = {n: i for i, n in names}
+        for name, _module in self.model.named_modules():
+            if not _is_exact_target_module(name, self.config.targets):
+                continue
+            m = re.search(r"layers\.(\d+)", name)
+            if not m:
+                continue
+            layer_idx = int(m.group(1))
+            if layer_idx in self.config.layers:
+                names.append((layer_idx, name))
+
+        # One activation file is written per layer, so enforce one hook per layer.
+        by_layer: Dict[int, str] = {}
+        for layer_idx, name in sorted(names, key=lambda x: (x[0], x[1])):
+            if layer_idx in by_layer:
+                logger.warning("Multiple exact target modules for layer %s: keeping %s, ignoring %s", layer_idx, by_layer[layer_idx], name)
+                continue
+            by_layer[layer_idx] = name
+
+        self.target_module_names = [by_layer[i] for i in sorted(by_layer)]
+        self.module_to_layer = {n: i for i, n in by_layer.items()}
         if not self.target_module_names:
-            raise RuntimeError("No target modules found. Check KIF_PROBE_LAYERS and KIF_PROBE_TARGETS.")
-        logger.info("Target modules: %d across layers=%s", len(self.target_module_names), sorted(set(self.module_to_layer.values())))
+            raise RuntimeError("No exact target modules found. Check KIF_PROBE_LAYERS and KIF_PROBE_TARGETS.")
+        logger.info("Target modules: %d exact hooks across layers=%s", len(self.target_module_names), sorted(by_layer.keys()))
+        logger.info("Target module names: %s", self.target_module_names)
 
     def _make_hook(self, module_name: str):
         def hook_fn(module, inputs, output):
@@ -350,6 +377,7 @@ class OptimizedProbeRobot:
                 "fp16_saves": self.config.save_dtype_fp16,
                 "compression_level": self.config.compression_level,
                 "skip_existing": self.config.skip_existing,
+                "exact_target_matching": True,
             },
             "prompts": {
                 pid: {
@@ -397,7 +425,7 @@ class OptimizedProbeRobot:
     def run(self) -> None:
         logger.info("=" * 64)
         logger.info("Starting Module B: Hooks-in-Parallel + Batching")
-        logger.info("Config: layers=%s batch_size=%s max_length=%s capture_scope=%s compression=%s skip_existing=%s", self.config.layers, self.config.batch_size, self.config.max_length, self.config.capture_scope, self.config.compression_level, self.config.skip_existing)
+        logger.info("Config: layers=%s targets=%s batch_size=%s max_length=%s capture_scope=%s compression=%s skip_existing=%s", self.config.layers, self.config.targets, self.config.batch_size, self.config.max_length, self.config.capture_scope, self.config.compression_level, self.config.skip_existing)
         logger.info("=" * 64)
         saved = self.collect_all()
         self._write_index(saved)
