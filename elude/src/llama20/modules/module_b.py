@@ -3,6 +3,15 @@
 # One forward pass per batch captures ALL target layers via hooks, then saves
 # per-prompt, per-layer activations to disk. This removes the O(num_layers)
 # forward-pass bottleneck and fully utilizes the GPU with batching.
+#
+# 3090/ELUDe fast defaults:
+#   KIF_PROBE_LAYERS=11,12,13,14
+#   KIF_PROBE_BATCH_SIZE=16
+#   KIF_PROBE_CAPTURE_SCOPE=last_token|full
+#   KIF_PROBE_COMPRESSION_LEVEL=1
+#   KIF_PROBE_SKIP_EXISTING=1
+
+from __future__ import annotations
 
 import os
 import re
@@ -27,16 +36,13 @@ except Exception:
     _HAS_BNB = False
 from tqdm.auto import tqdm
 
-# Optional advanced libs with safe fallbacks
 try:
-    import compress_pickle  # for fast compressed dumps
-    ADVANCED_ANALYSIS_AVAILABLE = True
+    import compress_pickle
 except Exception:
-    ADVANCED_ANALYSIS_AVAILABLE = False
     import pickle
     import gzip
 
-    def _cp_dump(data, filename, compression="gzip", compresslevel=3, **kwargs):
+    def _cp_dump(data, filename, compression="gzip", compresslevel=1, **kwargs):
         if compression != "gzip":
             raise ValueError("Only gzip compression supported in fallback.")
         with gzip.open(filename, "wb", compresslevel=compresslevel) as f:
@@ -48,9 +54,6 @@ except Exception:
 
     compress_pickle = type("compress_pickle_fallback", (), {"dump": staticmethod(_cp_dump), "load": staticmethod(_cp_load)})
 
-# -----------------------------------------------------------
-# Logging
-# -----------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
@@ -58,45 +61,73 @@ logging.basicConfig(
 )
 logger = logging.getLogger("KIF-ModuleB")
 
-# -----------------------------------------------------------
-# Config
-# -----------------------------------------------------------
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "")
+    if raw == "":
+        return default
+    return raw not in {"0", "false", "False", "no", "NO"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        logger.warning("Invalid integer for %s=%r; using %s", name, raw, default)
+        return default
+
+
+def _parse_layers(raw: str | None, default: List[int]) -> List[int]:
+    if not raw:
+        return list(default)
+    out: List[int] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            out.extend(range(int(a), int(b) + 1))
+        else:
+            out.append(int(part))
+    return sorted(set(out)) or list(default)
+
+
 @dataclass
 class ProbeConfig:
-    """Configuration for activation probing via parallel hooks."""
-    # IO
     model_dir: str = "outputs/model"
     prompts_file: str = "outputs/datasets/prompts.jsonl"
     output_dir: Path = Path("outputs/activations")
 
-    # What to capture
-    layers: List[int] = field(default_factory=lambda: list(range(32)))  # adapt to your model depth
-    targets: List[str] = field(default_factory=lambda: ["mlp"])       # capture MLPs by default
+    # ELUDe/3090 default is deliberately restricted to KIF middle MLP layers.
+    layers: List[int] = field(default_factory=lambda: _parse_layers(os.getenv("KIF_PROBE_LAYERS"), [11, 12, 13, 14]))
+    targets: List[str] = field(default_factory=lambda: [x.strip() for x in os.getenv("KIF_PROBE_TARGETS", "mlp").split(",") if x.strip()])
 
-    # Performance
-    batch_size: int = 32
-    max_length: int = 128
-    use_half_precision: bool = True              # fp16 for model weights (if supported)
-    use_4bit: bool = True                         # prefer 4-bit for 8B models on 16GB GPUs
-    save_dtype_fp16: bool = True                 # store activations as float16 on disk
+    batch_size: int = field(default_factory=lambda: _env_int("KIF_PROBE_BATCH_SIZE", 16))
+    max_length: int = field(default_factory=lambda: _env_int("KIF_PROBE_MAX_LENGTH", 128))
+    use_half_precision: bool = field(default_factory=lambda: _env_bool("KIF_PROBE_FP16", True))
+    use_4bit: bool = field(default_factory=lambda: _env_bool("KIF_USE_4BIT", True))
+    save_dtype_fp16: bool = field(default_factory=lambda: _env_bool("KIF_PROBE_SAVE_FP16", True))
 
-    # Device & memory
-    device_map: str = "auto"                    # let HF shard model
-    cleanup_every_batches: int = 10              # empty CUDA cache periodically
+    device_map: str = field(default_factory=lambda: os.getenv("KIF_PROBE_DEVICE_MAP", "auto"))
+    cleanup_every_batches: int = field(default_factory=lambda: _env_int("KIF_PROBE_CLEANUP_EVERY", 25))
 
-    # Storage
-    compression_level: int = 3                   # gzip compress level for dumps
+    # gzip level 1 is much faster; activation files are already fp16.
+    compression_level: int = field(default_factory=lambda: _env_int("KIF_PROBE_COMPRESSION_LEVEL", 1))
 
-    # Optional: capture only last token to reduce storage ("full" | "last_token")
-    capture_scope: str = "full"
+    # "last_token" is much smaller/faster on disk; "full" preserves old behavior.
+    capture_scope: str = field(default_factory=lambda: os.getenv("KIF_PROBE_CAPTURE_SCOPE", "last_token"))
+    skip_existing: bool = field(default_factory=lambda: _env_bool("KIF_PROBE_SKIP_EXISTING", True))
 
     def __post_init__(self):
         self.output_dir = Path(self.output_dir)
         (self.output_dir / "mlp").mkdir(parents=True, exist_ok=True)
+        if self.capture_scope not in {"full", "last_token"}:
+            raise ValueError("KIF_PROBE_CAPTURE_SCOPE must be 'full' or 'last_token'")
 
-# -----------------------------------------------------------
-# Utilities
-# -----------------------------------------------------------
 
 def get_primary_device(model: nn.Module) -> torch.device:
     try:
@@ -110,64 +141,44 @@ def to_numpy_for_saving(t: torch.Tensor, fp16: bool = True) -> np.ndarray:
         t = t.detach().to("cpu")
     if fp16 and t.dtype in (torch.float32, torch.float64):
         t = t.half()
-    # ensure contiguous for pickle speed
     t = t.contiguous()
-    return t.numpy().astype(np.float16 if fp16 else np.float32)
+    return t.numpy().astype(np.float16 if fp16 else np.float32, copy=False)
 
 
-# -----------------------------------------------------------
-# Parallel Hook Collector
-# -----------------------------------------------------------
 class ParallelActivationCollector:
-    """Attach hooks to all target modules once and capture outputs in a single pass."""
-
     def __init__(self, model: nn.Module, tokenizer: AutoTokenizer, config: ProbeConfig):
         self.model = model
         self.tokenizer = tokenizer
         self.config = config
         self.device = get_primary_device(model)
-
-        # module name -> layer_idx
         self.module_to_layer: Dict[str, int] = {}
-        # ordered list of target module names (deterministic iteration)
         self.target_module_names: List[str] = []
-
-        # populated on each forward pass: module_name -> tensor(batch, seq, hidden)
         self.captured_activations: Dict[str, torch.Tensor] = {}
         self.hooks: List[Any] = []
-
         self._discover_targets()
         self._register_all_hooks()
 
-    # ---- discovery ----
     def _discover_targets(self) -> None:
         names = []
         for name, module in self.model.named_modules():
-            # target MLP blocks only
-            if any(t in name.lower() for t in self.config.targets):
-                # detect layer index like "layers.12" or "model.layers.12"
+            lname = name.lower()
+            if any(t in lname for t in self.config.targets):
                 m = re.search(r"layers\.(\d+)", name)
                 if not m:
                     continue
                 layer_idx = int(m.group(1))
                 if layer_idx in self.config.layers:
                     names.append((layer_idx, name))
-        # stable sort by layer index then name
         names.sort(key=lambda x: (x[0], x[1]))
         self.target_module_names = [n for _, n in names]
         self.module_to_layer = {n: i for i, n in names}
-
         if not self.target_module_names:
-            raise RuntimeError("No target modules found. Check `layers` and `targets` in ProbeConfig.")
+            raise RuntimeError("No target modules found. Check KIF_PROBE_LAYERS and KIF_PROBE_TARGETS.")
+        logger.info("Target modules: %d across layers=%s", len(self.target_module_names), sorted(set(self.module_to_layer.values())))
 
-        logger.info(f"Target modules: {len(self.target_module_names)} across {len(set(self.module_to_layer.values()))} layers")
-
-    # ---- hooks ----
     def _make_hook(self, module_name: str):
         def hook_fn(module, inputs, output):
-            # For LlamaMLP and similar, output is a tensor
             out = output[0] if isinstance(output, tuple) else output
-            # Detach immediately; keep on device to avoid D2H thrash
             self.captured_activations[module_name] = out.detach()
         return hook_fn
 
@@ -176,10 +187,10 @@ class ParallelActivationCollector:
         for module_name in self.target_module_names:
             mod = named.get(module_name, None)
             if mod is None:
-                logger.warning(f"Module not found during hook registration: {module_name}")
+                logger.warning("Module not found during hook registration: %s", module_name)
                 continue
             self.hooks.append(mod.register_forward_hook(self._make_hook(module_name)))
-        logger.info(f"Registered {len(self.hooks)} forward hooks")
+        logger.info("Registered %d forward hooks", len(self.hooks))
 
     def remove_hooks(self) -> None:
         for h in self.hooks:
@@ -190,7 +201,6 @@ class ParallelActivationCollector:
         self.hooks.clear()
         logger.info("Removed all hooks")
 
-    # ---- capture ----
     def _tokenize_batch(self, texts: List[str]) -> Dict[str, torch.Tensor]:
         enc = self.tokenizer(
             texts,
@@ -199,64 +209,56 @@ class ParallelActivationCollector:
             truncation=True,
             max_length=self.config.max_length,
         )
-        # With device_map="auto", place inputs on the device of the embeddings (first param device)
-        enc = {k: v.to(self.device) for k, v in enc.items()}
-        return enc
+        return {k: v.to(self.device) for k, v in enc.items()}
 
     def _maybe_slice_last_token(self, t: torch.Tensor) -> torch.Tensor:
         if self.config.capture_scope == "last_token":
-            # keep shape (batch, 1, hidden) for consistency
             return t[:, -1:, :]
         return t
 
+    def expected_paths_for_prompt(self, prompt_id: str) -> List[Path]:
+        return [self.config.output_dir / "mlp" / f"{prompt_id}_layer{layer_idx}_mlp.pkl.gz" for layer_idx in sorted(set(self.module_to_layer.values()))]
+
     @torch.inference_mode()
     def collect_batch(self, prompts: List[str], prompt_ids: List[str]) -> Dict[str, List[Path]]:
-        """Run one forward pass and save per-prompt, per-layer activations.
-        Returns mapping prompt_id -> list[Path] of saved files.
-        """
         assert len(prompts) == len(prompt_ids)
         self.captured_activations.clear()
 
+        if self.config.skip_existing:
+            remaining = [(p, pid) for p, pid in zip(prompts, prompt_ids) if not all(x.exists() for x in self.expected_paths_for_prompt(pid))]
+            if not remaining:
+                return {pid: self.expected_paths_for_prompt(pid) for pid in prompt_ids}
+            prompts, prompt_ids = zip(*remaining)
+            prompts, prompt_ids = list(prompts), list(prompt_ids)
+
         inputs = self._tokenize_batch(prompts)
-        # disable caches/extra outputs for speed if supported
         try:
             _ = self.model(**inputs, use_cache=False, output_hidden_states=False, output_attentions=False)
         except TypeError:
             _ = self.model(**inputs)
 
-        # Save everything then drop references
         saved: Dict[str, List[Path]] = defaultdict(list)
-
         for module_name, tensor in self.captured_activations.items():
             layer_idx = self.module_to_layer.get(module_name)
             if layer_idx is None:
                 continue
-
             tensor = self._maybe_slice_last_token(tensor)
-            # tensor shape: (B, S, H) or (B, 1, H)
-            B = tensor.shape[0]
-            for b in range(B):
+            for b in range(tensor.shape[0]):
                 pid = prompt_ids[b]
+                path = self.config.output_dir / "mlp" / f"{pid}_layer{layer_idx}_mlp.pkl.gz"
+                if self.config.skip_existing and path.exists():
+                    saved[pid].append(path)
+                    continue
                 data_np = to_numpy_for_saving(tensor[b], fp16=self.config.save_dtype_fp16)
-                filename = f"{pid}_layer{layer_idx}_mlp.pkl.gz"
-                path = self.config.output_dir / "mlp" / filename
                 compress_pickle.dump(data_np, path, compression="gzip", compresslevel=self.config.compression_level)
                 saved[pid].append(path)
                 del data_np
-
-            # free activation ASAP
             del tensor
 
-        # post-batch cleanup
         self.captured_activations.clear()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
         return saved
 
-# -----------------------------------------------------------
-# Orchestrator
-# -----------------------------------------------------------
+
 class OptimizedProbeRobot:
     def __init__(self, config: ProbeConfig):
         self.config = config
@@ -264,24 +266,27 @@ class OptimizedProbeRobot:
         self._load_model()
         self.collector = ParallelActivationCollector(self.model, self.tokenizer, self.config)
 
-    # ---- IO ----
     def _load_prompts(self) -> None:
         with open(self.config.prompts_file, "r", encoding="utf-8") as f:
-            self.prompts: List[Dict[str, Any]] = [json.loads(line) for line in f]
+            self.prompts: List[Dict[str, Any]] = [json.loads(line) for line in f if line.strip()]
         if not self.prompts:
             raise RuntimeError("No prompts found in prompts_file.")
         uniq = len({p.get("triple_id") for p in self.prompts})
-        logger.info(f"Loaded {len(self.prompts)} prompts across {uniq} triples")
+        logger.info("Loaded %d prompts across %d triples", len(self.prompts), uniq)
 
     def _load_model(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_dir, use_fast=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_dir, use_fast=True, trust_remote_code=True)
         if self.tokenizer.pad_token is None:
-            # fallback padding
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        logger.info(f"Loading model from: {self.config.model_dir}")
-        # free caches before big load
+        logger.info("Loading model from: %s", self.config.model_dir)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            try:
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+                torch.backends.cudnn.benchmark = True
+            except Exception:
+                pass
 
         kwargs = dict(
             device_map=self.config.device_map,
@@ -296,61 +301,60 @@ class OptimizedProbeRobot:
                 bnb_4bit_compute_dtype=torch.float16 if self.config.use_half_precision else torch.float32,
                 bnb_4bit_use_double_quant=True,
             )
-            # torch_dtype is redundant with quantized loading but harmless.
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.config.model_dir,
-            **kwargs,
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(self.config.model_dir, **kwargs)
         self.model.eval()
-
+        if hasattr(self.model, "config"):
+            self.model.config.use_cache = False
         if torch.cuda.is_available():
-            dev = get_primary_device(self.model)
-            logger.info(f"Model loaded on device: {dev}; CUDA device count: {torch.cuda.device_count()}")
+            logger.info("Model loaded on device: %s; CUDA device count: %d", get_primary_device(self.model), torch.cuda.device_count())
         else:
             logger.warning("CUDA not available; running on CPU.")
 
-    # ---- collection ----
     def collect_all(self) -> Dict[str, List[Path]]:
         saved_all: Dict[str, List[Path]] = defaultdict(list)
-
         B = self.config.batch_size
         total = len(self.prompts)
-        for start in tqdm(range(0, total, B), desc="Collecting activations"):
+        for batch_idx, start in enumerate(tqdm(range(0, total, B), desc="Collecting activations"), start=1):
             batch = self.prompts[start:start + B]
             texts = [p["prompt"] for p in batch]
             ids = [p["id"] for p in batch]
-
             try:
                 saved = self.collector.collect_batch(texts, ids)
                 for pid, paths in saved.items():
                     saved_all[pid].extend(paths)
+            except torch.cuda.OutOfMemoryError as e:
+                logger.error("OOM at batch %d-%d. Lower KIF_PROBE_BATCH_SIZE. Error: %s", start, start + len(batch), e)
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                raise
             except Exception as e:
-                logger.error(f"Batch {start}-{start+len(batch)} failed: {e}")
+                logger.error("Batch %d-%d failed: %s", start, start + len(batch), e)
                 continue
-
-            # periodic cleanup
-            if torch.cuda.is_available() and ((start // max(B, 1) + 1) % self.config.cleanup_every_batches == 0):
+            if torch.cuda.is_available() and (batch_idx % max(1, self.config.cleanup_every_batches) == 0):
                 torch.cuda.empty_cache()
-
+                gc.collect()
         return saved_all
 
-    # ---- reports ----
     def _write_index(self, saved_paths: Dict[str, List[Path]]) -> None:
+        prompt_by_id = {p.get("id"): p for p in self.prompts}
         index = {
             "config": {
                 "layers": self.config.layers,
                 "targets": self.config.targets,
                 "model": self.config.model_dir,
                 "batch_size": self.config.batch_size,
+                "max_length": self.config.max_length,
                 "capture_scope": self.config.capture_scope,
                 "fp16_model": self.config.use_half_precision,
                 "use_4bit": self.config.use_4bit,
                 "fp16_saves": self.config.save_dtype_fp16,
+                "compression_level": self.config.compression_level,
+                "skip_existing": self.config.skip_existing,
             },
             "prompts": {
                 pid: {
                     "paths": [str(p) for p in paths],
-                    "triple_id": next((x.get("triple_id") for x in self.prompts if x.get("id") == pid), None),
+                    "triple_id": prompt_by_id.get(pid, {}).get("triple_id"),
                     "activation_count": len(paths),
                 }
                 for pid, paths in saved_paths.items()
@@ -361,9 +365,8 @@ class OptimizedProbeRobot:
             },
         }
         path = self.config.output_dir / "activation_index.json"
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(index, f, indent=2)
-        logger.info(f"Wrote activation index to {path}")
+        path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+        logger.info("Wrote activation index to %s", path)
 
     def _write_report(self, saved_paths: Dict[str, List[Path]]) -> None:
         total_size = 0
@@ -377,7 +380,6 @@ class OptimizedProbeRobot:
                         layer_counts[int(m.group(1))] += 1
                 except OSError:
                     pass
-
         report = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "model": self.config.model_dir,
@@ -389,47 +391,26 @@ class OptimizedProbeRobot:
             },
         }
         path = self.config.output_dir / "collection_report.json"
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
-        logger.info(f"Wrote collection report to {path}")
+        path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Wrote collection report to %s", path)
 
     def run(self) -> None:
         logger.info("=" * 64)
         logger.info("Starting Module B: Hooks-in-Parallel + Batching")
+        logger.info("Config: layers=%s batch_size=%s max_length=%s capture_scope=%s compression=%s skip_existing=%s", self.config.layers, self.config.batch_size, self.config.max_length, self.config.capture_scope, self.config.compression_level, self.config.skip_existing)
         logger.info("=" * 64)
-
         saved = self.collect_all()
         self._write_index(saved)
         self._write_report(saved)
-
-        # tidy up hooks before exit
         self.collector.remove_hooks()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
+        gc.collect()
         logger.info("Module B completed successfully ✔")
 
 
-# -----------------------------------------------------------
-# Entrypoint
-# -----------------------------------------------------------
-
 def run_module_b():
-    # You can tweak defaults here for your box
-    cfg = ProbeConfig(
-        layers=[11,12,13,14],      # adapt to model depth (e.g., Llama-2-7B has 32)
-        targets=["mlp"],
-        batch_size=32,               # try 16/32/64 based on VRAM
-        max_length=128,
-        use_half_precision=True,     # fp16 weights if supported
-        use_4bit=os.getenv("KIF_USE_4BIT", "1") not in {"0", "false", "False"},
-        save_dtype_fp16=True,        # store activations as fp16
-        device_map="auto",
-        cleanup_every_batches=10,
-        compression_level=3,
-        capture_scope="full",       # or "last_token" to shrink storage massively
-    )
-
+    cfg = ProbeConfig()
     robot = OptimizedProbeRobot(cfg)
     robot.run()
 
