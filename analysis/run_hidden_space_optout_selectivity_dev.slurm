@@ -20,8 +20,19 @@ PROMPTS_JSONL="$SRC/app/outputs/datasets/prompts.jsonl"
 OPTOUT_MODEL="$SRC/framework/outputs/optout/optout_main_4734680/optout/model"
 OUT_DIR="$PCA/analysis/outputs_hidden_space_optout_selectivity"
 
-source "$LLMRUN/llm_env/bin/activate"
+ENV_PATH="$LLMRUN/envs/kif-torchclean-py311-cu124"
+ENV_PY="$ENV_PATH/bin/python"
 
+if [[ ! -x "$ENV_PY" ]]; then
+  echo "[ERROR] Missing working Python: $ENV_PY" >&2
+  exit 2
+fi
+
+export PATH="$ENV_PATH/bin:$PATH"
+export PYTHONNOUSERSITE=1
+hash -r
+
+export PYTHONPATH="$PCA:$SRC:$SRC/app/src:${PYTHONPATH:-}"
 export HF_HOME="$LLMRUN/data/hf"
 export HF_HUB_CACHE="$HF_HOME"
 export HUGGINGFACE_HUB_CACHE="$HF_HOME"
@@ -35,7 +46,6 @@ export PYTHONFAULTHANDLER=1
 export PYTHONUNBUFFERED=1
 export TRANSFORMERS_OFFLINE=1
 export HF_HUB_OFFLINE=1
-# Avoid optional PyTorch compiler/profiler initialization paths on flaky dev nodes.
 export TORCHDYNAMO_DISABLE=1
 export TORCH_COMPILE_DISABLE=1
 export CUDA_MODULE_LOADING=LAZY
@@ -50,7 +60,7 @@ echo "[$(date -Is)] [HSPACE-OPTOUT] Opt-Out model: $OPTOUT_MODEL"
 echo "[$(date -Is)] [HSPACE-OPTOUT] Prompts: $PROMPTS_JSONL"
 echo "[$(date -Is)] [HSPACE-OPTOUT] Output directory: $OUT_DIR"
 echo "[$(date -Is)] [HSPACE-OPTOUT] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
-echo "[$(date -Is)] [HSPACE-OPTOUT] Python: $(which python)"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Python: $ENV_PY"
 
 if [[ ! -d "$OPTOUT_MODEL" ]]; then
   echo "[HSPACE-OPTOUT][ERROR] Missing Opt-Out model directory: $OPTOUT_MODEL" >&2
@@ -62,20 +72,22 @@ if [[ ! -f "$PROMPTS_JSONL" ]]; then
 fi
 
 echo "[$(date -Is)] [HSPACE-OPTOUT] Starting syntax compile"
-python3 -m py_compile analysis/hidden_space_optout_selectivity_eval.py
+"$ENV_PY" -m py_compile analysis/hidden_space_optout_selectivity_eval.py
 echo "[$(date -Is)] [HSPACE-OPTOUT] Syntax compile finished"
 
 echo "[$(date -Is)] [HSPACE-OPTOUT] Quick torch import check"
-python -u - <<'PY'
+"$ENV_PY" -u - <<'PY'
 import time
 print('[HSPACE-OPTOUT] before import torch', flush=True)
 t0=time.time()
 import torch
-print(f'[HSPACE-OPTOUT] after import torch {time.time()-t0:.2f}s cuda={torch.cuda.is_available()}', flush=True)
+print(f'[HSPACE-OPTOUT] after import torch {time.time()-t0:.2f}s cuda={torch.cuda.is_available()} torch={torch.__version__} cuda_version={torch.version.cuda}', flush=True)
+if torch.cuda.is_available():
+    print(f'[HSPACE-OPTOUT] gpu={torch.cuda.get_device_name(0)}', flush=True)
 PY
 
 echo "[$(date -Is)] [HSPACE-OPTOUT] Starting fast evaluator"
-python -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
+"$ENV_PY" -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
   --base_model_dir meta-llama/Llama-3.1-8B \
   --model_dir "$OPTOUT_MODEL" \
   --model_label "Opt-Out" \
@@ -93,7 +105,7 @@ python -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
 echo "[$(date -Is)] [HSPACE-OPTOUT] Evaluator finished"
 
 echo "[HSPACE-OPTOUT] Summary:"
-python - <<'PY'
+"$ENV_PY" - <<'PY'
 import json
 from pathlib import Path
 p = Path('/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/analysis/outputs_hidden_space_optout_selectivity/hidden_space_optout_selectivity_summary.json')
