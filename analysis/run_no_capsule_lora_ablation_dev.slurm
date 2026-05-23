@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=nocaplora
-#SBATCH --partition=dev_gpu_a100_il,dev_gpu_h100
+#SBATCH --partition=gpu_a100_short,gpu_h100_short,gpu_h100,gpu_a100_il,gpu_h100_il
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-gpu=8
-#SBATCH --mem=100G
-#SBATCH --time=00:30:00
+#SBATCH --cpus-per-gpu=16
+#SBATCH --mem=120G
+#SBATCH --time=02:00:00
 #SBATCH --chdir=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca
 #SBATCH --output=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/logs/nocaplora-%j.out
 #SBATCH --error=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/logs/nocaplora-%j.err
@@ -46,8 +46,8 @@ export PYTHONUNBUFFERED=1
 export TORCHDYNAMO_DISABLE=1
 export TORCH_COMPILE_DISABLE=1
 export CUDA_MODULE_LOADING=LAZY
-export OMP_NUM_THREADS=8
-export MKL_NUM_THREADS=8
+export OMP_NUM_THREADS=16
+export MKL_NUM_THREADS=16
 
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
@@ -55,6 +55,8 @@ echo "[NO-CAPSULE-LORA] Running from: $(pwd)"
 echo "[NO-CAPSULE-LORA] Output directory: $OUT_DIR"
 echo "[NO-CAPSULE-LORA] Prompts file: $PROMPTS_JSONL"
 echo "[NO-CAPSULE-LORA] Python: $ENV_PY"
+echo "[NO-CAPSULE-LORA] Node: ${SLURMD_NODENAME:-unknown}"
+echo "[NO-CAPSULE-LORA] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
 if [[ ! -f "$PROMPTS_JSONL" ]]; then
   echo "[NO-CAPSULE-LORA][ERROR] Missing prompts file: $PROMPTS_JSONL" >&2
