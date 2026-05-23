@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=hspopt
-#SBATCH --partition=dev_gpu_a100_il,dev_gpu_h100
-#SBATCH --exclude=uc2n902
+#SBATCH --partition=dev_gpu_h100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -36,6 +35,12 @@ export PYTHONFAULTHANDLER=1
 export PYTHONUNBUFFERED=1
 export TRANSFORMERS_OFFLINE=1
 export HF_HUB_OFFLINE=1
+# Avoid optional PyTorch compiler/profiler initialization paths on flaky dev nodes.
+export TORCHDYNAMO_DISABLE=1
+export TORCH_COMPILE_DISABLE=1
+export CUDA_MODULE_LOADING=LAZY
+export OMP_NUM_THREADS=8
+export MKL_NUM_THREADS=8
 
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
