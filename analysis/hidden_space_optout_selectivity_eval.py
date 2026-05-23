@@ -4,10 +4,14 @@
 Optimized version: caches PRE hidden states, computes Opt-Out hidden drift, uses
 batched generation, and computes EL10/E30 from one batched 30-step autoregressive
 pass instead of per-row loops. Designed for one 30-minute dev GPU job.
+
+Important: the Opt-Out artifact may be either a merged model directory or a PEFT
+adapter directory. The loader is PEFT-aware and follows the same loading logic as
+our earlier fast evaluation scripts.
 """
 from __future__ import annotations
 
-import argparse, gc, json, re
+import argparse, gc, json, re, time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
@@ -20,6 +24,13 @@ try:
     HAS_BNB = True
 except Exception:
     HAS_BNB = False
+
+try:
+    from peft import PeftModel
+    HAS_PEFT = True
+except Exception:
+    PeftModel = None
+    HAS_PEFT = False
 
 
 def log(msg: str) -> None:
@@ -122,10 +133,27 @@ def build_rows(subjects: Sequence[str]) -> Tuple[List[Dict[str, Any]], List[Dict
     return forget_rows, benign_rows
 
 
-def bnb_config(load_mode: str):
-    if load_mode != "4bit" or not HAS_BNB:
-        return None
-    return BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True)
+def bnb_kwargs(load_mode: str) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {"trust_remote_code": True}
+    if load_mode == "4bit":
+        if not HAS_BNB:
+            raise ImportError("BitsAndBytesConfig is unavailable but --load_mode 4bit was requested")
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+            bnb_4bit_use_double_quant=True,
+        )
+        kwargs["device_map"] = "auto"
+    elif load_mode == "bf16":
+        kwargs["torch_dtype"] = torch.bfloat16
+    elif load_mode == "fp16":
+        kwargs["torch_dtype"] = torch.float16
+    elif load_mode == "fp32":
+        kwargs["torch_dtype"] = torch.float32
+    else:
+        raise ValueError(f"Unknown load mode: {load_mode}")
+    return kwargs
 
 
 def load_tok(model_dir: str):
@@ -136,19 +164,37 @@ def load_tok(model_dir: str):
     return tok
 
 
-def load_model(model_dir: str, device: str, load_mode: str):
-    kwargs: Dict[str, Any] = {"trust_remote_code": True}
-    q = bnb_config(load_mode)
-    if q is not None:
-        kwargs["quantization_config"] = q
-        kwargs["device_map"] = {"": 0} if device.startswith("cuda") else None
+def load_model_any(path: str, base_model_dir: str, device: str, load_mode: str):
+    """Load a base/merged model or a PEFT adapter, matching earlier eval scripts."""
+    start = time.time()
+    p = Path(path)
+    kwargs = bnb_kwargs(load_mode)
+    log(f"loader: path={path}")
+    if p.exists():
+        try:
+            names = sorted(x.name for x in p.iterdir())[:20]
+            log(f"loader: first files={names}")
+        except Exception as exc:
+            log(f"loader: could not list files: {exc}")
+    is_adapter = p.exists() and (p / "adapter_config.json").exists()
+    log(f"loader: is_adapter={is_adapter}, load_mode={load_mode}")
+    if is_adapter:
+        if not HAS_PEFT:
+            raise ImportError("peft is required to load adapter_config.json artifacts")
+        log("loader: loading base model for PEFT adapter")
+        base = AutoModelForCausalLM.from_pretrained(base_model_dir, **kwargs)
+        if "bit" not in load_mode:
+            base.to(device)
+        log(f"loader: base loaded in {time.time() - start:.1f}s; attaching adapter")
+        model = PeftModel.from_pretrained(base, path)
     else:
-        kwargs["torch_dtype"] = torch.bfloat16 if load_mode == "bf16" else torch.float16 if load_mode == "fp16" else torch.float32
-    m = AutoModelForCausalLM.from_pretrained(model_dir, **kwargs)
-    if q is None:
-        m = m.to(device)
-    m.eval()
-    return m
+        log("loader: loading path as merged/full model")
+        model = AutoModelForCausalLM.from_pretrained(path, **kwargs)
+        if "bit" not in load_mode:
+            model.to(device)
+    model.eval()
+    log(f"loader: done in {time.time() - start:.1f}s")
+    return model
 
 
 def token_ids_for_aliases(tok, aliases: Sequence[str], max_ids: int) -> List[int]:
@@ -220,7 +266,6 @@ def generate_batch(model, tok, prompts: Sequence[str], device: str, max_new_toke
 
 @torch.inference_mode()
 def batched_target_mass(model, tok, prompts: Sequence[str], token_id_lists: Sequence[Sequence[int]], device: str, steps: int, batch_size: int) -> Tuple[List[float], List[float]]:
-    """Return EL10 and E30-style averages from one batched 30-step pass."""
     el10_out: List[float] = []
     e30_out: List[float] = []
     for i in range(0, len(prompts), batch_size):
@@ -230,7 +275,7 @@ def batched_target_mass(model, tok, prompts: Sequence[str], token_id_lists: Sequ
         ids = enc["input_ids"]
         attn = enc["attention_mask"]
         masses_by_step: List[List[float]] = []
-        for step in range(steps):
+        for _ in range(steps):
             out = model(input_ids=ids, attention_mask=attn)
             probs = torch.softmax(out.logits[:, -1, :].float(), dim=-1)
             vals = []
@@ -240,7 +285,7 @@ def batched_target_mass(model, tok, prompts: Sequence[str], token_id_lists: Sequ
             nxt = torch.argmax(probs, dim=-1, keepdim=True)
             ids = torch.cat([ids, nxt], dim=1)
             attn = torch.ones_like(ids, device=device)
-        arr = np.array(masses_by_step, dtype=np.float64)  # [steps,B]
+        arr = np.array(masses_by_step, dtype=np.float64)
         el10_out.extend(arr[:min(10, steps)].mean(axis=0).tolist())
         e30_out.extend(arr.mean(axis=0).tolist())
         log(f"mass {min(i + batch_size, len(prompts))}/{len(prompts)}")
@@ -285,7 +330,7 @@ def main() -> None:
         pre_h = np.load(pre_cache)
     else:
         log("loading PRE/base model for hidden cache")
-        pre_model = load_model(args.base_model_dir, args.device, args.load_mode)
+        pre_model = load_model_any(args.base_model_dir, args.base_model_dir, args.device, args.load_mode)
         pre_h = collect_hidden(pre_model, tok, all_prompts, args.device, args.layer, args.batch_size)
         np.save(pre_cache, pre_h)
         del pre_model; gc.collect()
@@ -294,7 +339,7 @@ def main() -> None:
         log(f"saved PRE hidden cache: {pre_cache}")
 
     log(f"loading post model: {args.model_dir}")
-    model = load_model(args.model_dir, args.device, args.load_mode)
+    model = load_model_any(args.model_dir, args.base_model_dir, args.device, args.load_mode)
     post_h = collect_hidden(model, tok, all_prompts, args.device, args.layer, args.batch_size)
     np.save(out_dir / f"{args.model_label.lower().replace('-', '_')}_hidden_layer{args.layer}.npy", post_h)
 
