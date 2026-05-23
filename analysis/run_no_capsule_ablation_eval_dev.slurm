@@ -22,8 +22,19 @@ PROMPTS_JSONL="$SRC/app/outputs/datasets/prompts.jsonl"
 EVAL_OUT="$PCA/analysis/outputs_no_capsule_lora_ablation_eval"
 MAIN_ADVREC="$PCA/analysis/outputs_adversarial_forget_recovery"
 
-source "$LLMRUN/llm_env/bin/activate"
+ENV_PATH="$LLMRUN/envs/kif-torchclean-py311-cu124"
+ENV_PY="$ENV_PATH/bin/python"
 
+if [[ ! -x "$ENV_PY" ]]; then
+  echo "[ERROR] Missing working Python: $ENV_PY" >&2
+  exit 2
+fi
+
+export PATH="$ENV_PATH/bin:$PATH"
+export PYTHONNOUSERSITE=1
+hash -r
+
+export PYTHONPATH="$PCA:$SRC:$SRC/app/src:${PYTHONPATH:-}"
 export HF_HOME="$LLMRUN/data/hf"
 export HF_HUB_CACHE="$HF_HOME"
 export HUGGINGFACE_HUB_CACHE="$HF_HOME"
@@ -33,12 +44,20 @@ export TORCH_HOME="$LLMRUN/data/torch"
 export TMPDIR="$LLMRUN/cache/tmp"
 export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTHONFAULTHANDLER=1
+export PYTHONUNBUFFERED=1
+export TORCHDYNAMO_DISABLE=1
+export TORCH_COMPILE_DISABLE=1
+export CUDA_MODULE_LOADING=LAZY
+export OMP_NUM_THREADS=8
+export MKL_NUM_THREADS=8
 
 mkdir -p "$PCA/logs" "$EVAL_OUT" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
 echo "[NO-CAPSULE-EVAL] Adapter: $ADAPTER"
 echo "[NO-CAPSULE-EVAL] Eval out: $EVAL_OUT"
 echo "[NO-CAPSULE-EVAL] Main advrec dir: $MAIN_ADVREC"
+echo "[NO-CAPSULE-EVAL] Python: $ENV_PY"
 
 if [[ ! -f "$ADAPTER/adapter_config.json" ]]; then
   echo "[NO-CAPSULE-EVAL][ERROR] Missing adapter_config.json under $ADAPTER. Finish training first." >&2
@@ -49,9 +68,16 @@ if [[ ! -d "$MAIN_ADVREC/checkpoints" ]]; then
   exit 2
 fi
 
-python3 -m py_compile analysis/evaluate_no_capsule_ablation.py
+"$ENV_PY" -m py_compile analysis/evaluate_no_capsule_ablation.py
 
-python -u analysis/evaluate_no_capsule_ablation.py \
+"$ENV_PY" -u - <<'PY'
+import torch
+print('[NO-CAPSULE-EVAL] torch', torch.__version__, 'cuda', torch.cuda.is_available(), 'cuda_version', torch.version.cuda, flush=True)
+if torch.cuda.is_available():
+    print('[NO-CAPSULE-EVAL] gpu', torch.cuda.get_device_name(0), flush=True)
+PY
+
+"$ENV_PY" -u -X faulthandler analysis/evaluate_no_capsule_ablation.py \
   --model_dir meta-llama/Llama-3.1-8B \
   --no_capsule_adapter_path "$ADAPTER" \
   --prompts_jsonl "$PROMPTS_JSONL" \
@@ -68,7 +94,7 @@ python -u analysis/evaluate_no_capsule_ablation.py \
   --seed 17
 
 echo "[NO-CAPSULE-EVAL] Summary excerpt:"
-python - <<'PY'
+"$ENV_PY" - <<'PY'
 import json
 from pathlib import Path
 p = Path('/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/analysis/outputs_no_capsule_lora_ablation_eval/no_capsule_ablation_summary.json')
