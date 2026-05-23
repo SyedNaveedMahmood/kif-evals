@@ -31,13 +31,15 @@ export TORCH_HOME="$LLMRUN/data/torch"
 export TMPDIR="$LLMRUN/cache/tmp"
 export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTHONFAULTHANDLER=1
 
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
-echo "[HSPACE-OPTOUT] Running from: $(pwd)"
-echo "[HSPACE-OPTOUT] Opt-Out model: $OPTOUT_MODEL"
-echo "[HSPACE-OPTOUT] Prompts: $PROMPTS_JSONL"
-echo "[HSPACE-OPTOUT] Output directory: $OUT_DIR"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Running from: $(pwd)"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Opt-Out model: $OPTOUT_MODEL"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Prompts: $PROMPTS_JSONL"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Output directory: $OUT_DIR"
+echo "[$(date -Is)] [HSPACE-OPTOUT] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
 if [[ ! -d "$OPTOUT_MODEL" ]]; then
   echo "[HSPACE-OPTOUT][ERROR] Missing Opt-Out model directory: $OPTOUT_MODEL" >&2
@@ -48,9 +50,12 @@ if [[ ! -f "$PROMPTS_JSONL" ]]; then
   exit 2
 fi
 
+echo "[$(date -Is)] [HSPACE-OPTOUT] Starting syntax compile"
 python3 -m py_compile analysis/hidden_space_optout_selectivity_eval.py
+echo "[$(date -Is)] [HSPACE-OPTOUT] Syntax compile finished"
 
-python -u analysis/hidden_space_optout_selectivity_eval.py \
+echo "[$(date -Is)] [HSPACE-OPTOUT] Starting fast evaluator"
+python -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
   --base_model_dir meta-llama/Llama-3.1-8B \
   --model_dir "$OPTOUT_MODEL" \
   --model_label "Opt-Out" \
@@ -58,12 +63,14 @@ python -u analysis/hidden_space_optout_selectivity_eval.py \
   --out_dir "$OUT_DIR" \
   --max_subjects 11 \
   --layer 11 \
-  --batch_size 4 \
+  --batch_size 8 \
+  --mass_batch_size 8 \
   --load_mode 4bit \
   --max_new_tokens 64 \
-  --el_steps 10 \
-  --e_steps 30 \
+  --steps 30 \
   --max_token_ids 12
+
+echo "[$(date -Is)] [HSPACE-OPTOUT] Evaluator finished"
 
 echo "[HSPACE-OPTOUT] Summary:"
 python - <<'PY'
