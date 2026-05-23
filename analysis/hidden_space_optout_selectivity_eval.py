@@ -5,9 +5,9 @@ Optimized version: caches PRE hidden states, computes Opt-Out hidden drift, uses
 batched generation, and computes EL10/E30 from one batched 30-step autoregressive
 pass instead of per-row loops. Designed for one 30-minute dev GPU job.
 
-Important: the Opt-Out artifact may be either a merged model directory or a PEFT
-adapter directory. The loader is PEFT-aware and follows the same loading logic as
-our earlier fast evaluation scripts.
+The corrected Opt-Out artifact is a full merged/sharded model. For A100/H100 dev
+GPUs, bf16 loading is faster than re-quantizing the 15GB checkpoint to 4-bit at
+load time. The loader still supports PEFT adapters for robustness.
 """
 from __future__ import annotations
 
@@ -133,8 +133,8 @@ def build_rows(subjects: Sequence[str]) -> Tuple[List[Dict[str, Any]], List[Dict
     return forget_rows, benign_rows
 
 
-def bnb_kwargs(load_mode: str) -> Dict[str, Any]:
-    kwargs: Dict[str, Any] = {"trust_remote_code": True}
+def model_kwargs(load_mode: str, device: str) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {"trust_remote_code": True, "low_cpu_mem_usage": True}
     if load_mode == "4bit":
         if not HAS_BNB:
             raise ImportError("BitsAndBytesConfig is unavailable but --load_mode 4bit was requested")
@@ -147,10 +147,16 @@ def bnb_kwargs(load_mode: str) -> Dict[str, Any]:
         kwargs["device_map"] = "auto"
     elif load_mode == "bf16":
         kwargs["torch_dtype"] = torch.bfloat16
+        if device.startswith("cuda"):
+            kwargs["device_map"] = {"": 0}
     elif load_mode == "fp16":
         kwargs["torch_dtype"] = torch.float16
+        if device.startswith("cuda"):
+            kwargs["device_map"] = {"": 0}
     elif load_mode == "fp32":
         kwargs["torch_dtype"] = torch.float32
+        if device.startswith("cuda"):
+            kwargs["device_map"] = {"": 0}
     else:
         raise ValueError(f"Unknown load mode: {load_mode}")
     return kwargs
@@ -165,10 +171,9 @@ def load_tok(model_dir: str):
 
 
 def load_model_any(path: str, base_model_dir: str, device: str, load_mode: str):
-    """Load a base/merged model or a PEFT adapter, matching earlier eval scripts."""
     start = time.time()
     p = Path(path)
-    kwargs = bnb_kwargs(load_mode)
+    kwargs = model_kwargs(load_mode, device)
     log(f"loader: path={path}")
     if p.exists():
         try:
@@ -177,20 +182,20 @@ def load_model_any(path: str, base_model_dir: str, device: str, load_mode: str):
         except Exception as exc:
             log(f"loader: could not list files: {exc}")
     is_adapter = p.exists() and (p / "adapter_config.json").exists()
-    log(f"loader: is_adapter={is_adapter}, load_mode={load_mode}")
+    log(f"loader: is_adapter={is_adapter}, load_mode={load_mode}, kwargs_keys={sorted(kwargs.keys())}")
     if is_adapter:
         if not HAS_PEFT:
             raise ImportError("peft is required to load adapter_config.json artifacts")
         log("loader: loading base model for PEFT adapter")
         base = AutoModelForCausalLM.from_pretrained(base_model_dir, **kwargs)
-        if "bit" not in load_mode:
+        if "device_map" not in kwargs:
             base.to(device)
         log(f"loader: base loaded in {time.time() - start:.1f}s; attaching adapter")
         model = PeftModel.from_pretrained(base, path)
     else:
         log("loader: loading path as merged/full model")
         model = AutoModelForCausalLM.from_pretrained(path, **kwargs)
-        if "bit" not in load_mode:
+        if "device_map" not in kwargs:
             model.to(device)
     model.eval()
     log(f"loader: done in {time.time() - start:.1f}s")
@@ -303,7 +308,7 @@ def main() -> None:
     ap.add_argument("--layer", type=int, default=11)
     ap.add_argument("--batch_size", type=int, default=8)
     ap.add_argument("--mass_batch_size", type=int, default=8)
-    ap.add_argument("--load_mode", default="4bit", choices=["4bit", "bf16", "fp16", "fp32"])
+    ap.add_argument("--load_mode", default="bf16", choices=["4bit", "bf16", "fp16", "fp32"])
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--max_new_tokens", type=int, default=64)
     ap.add_argument("--steps", type=int, default=30)
