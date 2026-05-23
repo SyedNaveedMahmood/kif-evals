@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=hspopt
 #SBATCH --partition=dev_gpu_a100_il,dev_gpu_h100
+#SBATCH --exclude=uc2n902
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
@@ -33,14 +34,18 @@ export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export PYTHONFAULTHANDLER=1
 export PYTHONUNBUFFERED=1
+export TRANSFORMERS_OFFLINE=1
+export HF_HUB_OFFLINE=1
 
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
 echo "[$(date -Is)] [HSPACE-OPTOUT] Running from: $(pwd)"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Node: ${SLURMD_NODENAME:-unknown}"
 echo "[$(date -Is)] [HSPACE-OPTOUT] Opt-Out model: $OPTOUT_MODEL"
 echo "[$(date -Is)] [HSPACE-OPTOUT] Prompts: $PROMPTS_JSONL"
 echo "[$(date -Is)] [HSPACE-OPTOUT] Output directory: $OUT_DIR"
 echo "[$(date -Is)] [HSPACE-OPTOUT] CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+echo "[$(date -Is)] [HSPACE-OPTOUT] Python: $(which python)"
 
 if [[ ! -d "$OPTOUT_MODEL" ]]; then
   echo "[HSPACE-OPTOUT][ERROR] Missing Opt-Out model directory: $OPTOUT_MODEL" >&2
@@ -54,6 +59,15 @@ fi
 echo "[$(date -Is)] [HSPACE-OPTOUT] Starting syntax compile"
 python3 -m py_compile analysis/hidden_space_optout_selectivity_eval.py
 echo "[$(date -Is)] [HSPACE-OPTOUT] Syntax compile finished"
+
+echo "[$(date -Is)] [HSPACE-OPTOUT] Quick torch import check"
+python -u - <<'PY'
+import time
+print('[HSPACE-OPTOUT] before import torch', flush=True)
+t0=time.time()
+import torch
+print(f'[HSPACE-OPTOUT] after import torch {time.time()-t0:.2f}s cuda={torch.cuda.is_available()}', flush=True)
+PY
 
 echo "[$(date -Is)] [HSPACE-OPTOUT] Starting fast evaluator"
 python -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
