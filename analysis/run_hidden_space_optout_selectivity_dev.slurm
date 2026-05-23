@@ -32,6 +32,7 @@ export TMPDIR="$LLMRUN/cache/tmp"
 export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export PYTHONFAULTHANDLER=1
+export PYTHONUNBUFFERED=1
 
 mkdir -p "$PCA/logs" "$OUT_DIR" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
@@ -65,7 +66,7 @@ python -u -X faulthandler analysis/hidden_space_optout_selectivity_eval.py \
   --layer 11 \
   --batch_size 8 \
   --mass_batch_size 8 \
-  --load_mode 4bit \
+  --load_mode bf16 \
   --max_new_tokens 64 \
   --steps 30 \
   --max_token_ids 12
