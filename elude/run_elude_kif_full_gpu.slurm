@@ -14,19 +14,28 @@
 set -euo pipefail
 
 LLMRUN=/pfs/work9/workspace/scratch/hd_ur228-llmrun
+SRC="$LLMRUN/src"
 PCA="$LLMRUN/src_pca"
 ELUDE_DIR="$PCA/elude"
 
-# Prefer the environment that has already been used successfully for recent jobs.
-if [[ -f "$LLMRUN/envs/kif-torchclean-py311-cu124/bin/activate" ]]; then
-  source "$LLMRUN/envs/kif-torchclean-py311-cu124/bin/activate"
-elif [[ -f "$LLMRUN/llm_env/bin/activate" ]]; then
-  source "$LLMRUN/llm_env/bin/activate"
-else
-  echo "[ELUDE-KIF][ERROR] Could not find expected Python environment." >&2
+# Use the same explicit Python environment style as the working no-capsule jobs.
+# Do not rely on `source activate`, because non-interactive full-GPU jobs can
+# fail before PATH is initialized.
+ENV_PATH="${KIF_ENV_PATH:-$LLMRUN/envs/kif-torchclean-py311-cu124}"
+ENV_PY="$ENV_PATH/bin/python"
+
+if [[ ! -x "$ENV_PY" ]]; then
+  echo "[ELUDE-KIF][ERROR] Missing working Python: $ENV_PY" >&2
+  echo "[ELUDE-KIF][DEBUG] Candidate env dirs under $LLMRUN:" >&2
+  find "$LLMRUN" -maxdepth 3 -path '*/bin/python' -type f 2>/dev/null | sed 's#/bin/python##' >&2 || true
   exit 2
 fi
 
+export PATH="$ENV_PATH/bin:$PATH"
+export PYTHONNOUSERSITE=1
+hash -r
+
+export PYTHONPATH="$ELUDE_DIR/src:$PCA:$SRC:$SRC/app/src:${PYTHONPATH:-}"
 export HF_HOME="$LLMRUN/data/hf"
 export HF_HUB_CACHE="$HF_HOME"
 export HUGGINGFACE_HUB_CACHE="$HF_HOME"
@@ -36,6 +45,13 @@ export TORCH_HOME="$LLMRUN/data/torch"
 export TMPDIR="$LLMRUN/cache/tmp"
 export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTHONFAULTHANDLER=1
+export PYTHONUNBUFFERED=1
+export TORCHDYNAMO_DISABLE=1
+export TORCH_COMPILE_DISABLE=1
+export CUDA_MODULE_LOADING=LAZY
+export OMP_NUM_THREADS=12
+export MKL_NUM_THREADS=12
 
 mkdir -p "$PCA/logs" "$HF_HOME" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$TMPDIR"
 
@@ -43,8 +59,9 @@ cd "$ELUDE_DIR"
 
 echo "[ELUDE-KIF] Host: $(hostname)"
 echo "[ELUDE-KIF] CWD: $(pwd)"
-echo "[ELUDE-KIF] Python: $(which python)"
-python - <<'PY'
+echo "[ELUDE-KIF] ENV_PATH: $ENV_PATH"
+echo "[ELUDE-KIF] Python: $ENV_PY"
+"$ENV_PY" - <<'PY'
 import torch, sys
 print('[ELUDE-KIF] torch', torch.__version__, 'cuda', torch.version.cuda, 'available', torch.cuda.is_available())
 if torch.cuda.is_available():
@@ -106,9 +123,9 @@ else
 fi
 
 # Apply code-level stability patches before running.
-python -u apply_elude_kif_patches.py
+"$ENV_PY" -u apply_elude_kif_patches.py
 
-python -m py_compile run_elude_pipeline.py \
+"$ENV_PY" -m py_compile run_elude_pipeline.py \
   src/llama20/modules/module_elude.py \
   src/llama20/modules/module_b.py \
   src/llama20/modules/module_c.py \
@@ -118,7 +135,7 @@ python -m py_compile run_elude_pipeline.py \
   src/llama20/modules/module8e.py
 
 echo "[ELUDE-KIF] Run controls:"
-python - <<'PY'
+"$ENV_PY" - <<'PY'
 import os, json
 keys = [
  'ELUDE_TARGETS','ELUDE_MAX_TARGETS','ELUDE_MAX_FORGET_TRAIN','ELUDE_MAX_RETAIN_TRAIN',
@@ -135,10 +152,10 @@ else
   ARGS+=(--max-targets "$ELUDE_MAX_TARGETS")
 fi
 
-python -u run_elude_pipeline.py "${ARGS[@]}"
+"$ENV_PY" -u -X faulthandler run_elude_pipeline.py "${ARGS[@]}"
 
 echo "[ELUDE-KIF] Final summaries:"
-python - <<'PY'
+"$ENV_PY" - <<'PY'
 import json
 from pathlib import Path
 for p in [Path('outputs/elude/metadata.json'), Path('outputs/signatures/signature_index.json'), Path('outputs/eval_elude/elude_summary.json')]:
