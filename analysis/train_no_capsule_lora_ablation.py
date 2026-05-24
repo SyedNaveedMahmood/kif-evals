@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """LoRA-only no-capsule ablation for KIF.
 
-Trains a PEFT LoRA adapter with preference/unlikelihood losses while removing
-KIF's representation-localized components: no capsule signatures, no hidden-state
-hooks, and no capsule-produced preferred outputs. The resulting adapter can be
-compared against PRE and the existing full KIF config-B adapter.
-
-The script is checkpointed for 30-minute dev-GPU jobs. Re-run the same command to
-resume from adapter_latest and train_state.json.
+This version loads only one base model. The frozen reference distribution is
+computed through PEFT's disable_adapter() context, avoiding a second 8B model
+load. This matters on bwUniCluster dev GPU because loading Llama-3.1-8B twice
+can consume the whole 30-minute walltime before training starts.
 """
 from __future__ import annotations
 
 import argparse, gc, json, random, shutil, time
+from contextlib import nullcontext
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -48,42 +46,24 @@ PREFERRED_NONANSWERS = [
 ]
 
 SUBJECT_TEMPLATES = [
-    "Tell me about {s}.",
-    "What are key facts about {s}?",
-    "Give a short background on {s}.",
-    "Write two sentences describing {s}.",
-    "Provide a concise overview of {s}.",
-    "Summarize who {s} is.",
-    "What is {s} known for?",
-    "Describe {s} briefly.",
-    "Who is {s}?",
-    "Can you tell me about {s}?",
-    "Give me a summary of {s}.",
-    "What do you know about {s}?",
-    "Summarize the career of {s} briefly.",
-    "Give me a brief overview of {s}.",
-    "Write a neutral encyclopedia-style note about {s}.",
+    "Tell me about {s}.", "What are key facts about {s}?", "Give a short background on {s}.",
+    "Write two sentences describing {s}.", "Provide a concise overview of {s}.",
+    "Summarize who {s} is.", "What is {s} known for?", "Describe {s} briefly.",
+    "Who is {s}?", "Can you tell me about {s}?", "Give me a summary of {s}.",
+    "What do you know about {s}?", "Summarize the career of {s} briefly.",
+    "Give me a brief overview of {s}.", "Write a neutral encyclopedia-style note about {s}.",
     "What public facts are associated with {s}?",
 ]
 
 BENIGN_PROMPTS = [
-    "Explain photosynthesis in one sentence.",
-    "What is 17 + 23?",
-    "Name three countries in Europe.",
-    "Write a short greeting to a new teammate.",
-    "Give a tip for staying productive.",
-    "Explain the concept of gravity briefly.",
-    "Summarize the causes of World War I in one line.",
-    "What's the capital of Japan?",
-    "Give a short definition of a polynomial.",
-    "Write two sentences about renewable energy.",
-    "List three features of mitochondria.",
-    "Give a concise definition of Bayesian inference.",
-    "Explain what a REST API is in one sentence.",
-    "What is the boiling point of water at sea level?",
-    "Define a prime number in one line.",
-    "Write a Python function that adds two numbers.",
-    "What is binary search?",
+    "Explain photosynthesis in one sentence.", "What is 17 + 23?", "Name three countries in Europe.",
+    "Write a short greeting to a new teammate.", "Give a tip for staying productive.",
+    "Explain the concept of gravity briefly.", "Summarize the causes of World War I in one line.",
+    "What's the capital of Japan?", "Give a short definition of a polynomial.",
+    "Write two sentences about renewable energy.", "List three features of mitochondria.",
+    "Give a concise definition of Bayesian inference.", "Explain what a REST API is in one sentence.",
+    "What is the boiling point of water at sea level?", "Define a prime number in one line.",
+    "Write a Python function that adds two numbers.", "What is binary search?",
     "Explain overfitting in machine learning briefly.",
 ]
 
@@ -140,7 +120,7 @@ def load_tokenizer(model_dir: str):
     return tok
 
 
-def load_lm(model_dir: str, cfg: TrainConfig, trainable: bool):
+def load_base_for_lora(model_dir: str, cfg: TrainConfig):
     kwargs: Dict[str, Any] = {"trust_remote_code": True}
     q = bnb_config(cfg.use_4bit)
     if q is not None:
@@ -151,7 +131,7 @@ def load_lm(model_dir: str, cfg: TrainConfig, trainable: bool):
     model = AutoModelForCausalLM.from_pretrained(model_dir, **kwargs)
     if q is None:
         model = model.to(cfg.device)
-    if trainable and q is not None and prepare_model_for_kbit_training is not None:
+    if q is not None and prepare_model_for_kbit_training is not None:
         model = prepare_model_for_kbit_training(model)
     return model
 
@@ -163,6 +143,10 @@ def attach_or_resume_lora(base_model, cfg: TrainConfig):
         return PeftModel.from_pretrained(base_model, latest, is_trainable=True)
     peft_cfg = LoraConfig(r=cfg.lora_r, lora_alpha=cfg.lora_alpha, target_modules=["q_proj", "v_proj", "o_proj"], lora_dropout=cfg.lora_dropout, bias="none", task_type="CAUSAL_LM")
     return get_peft_model(base_model, peft_cfg)
+
+
+def disabled_adapter(model):
+    return model.disable_adapter() if hasattr(model, "disable_adapter") else nullcontext()
 
 
 def get_subjects(cfg: TrainConfig) -> List[str]:
@@ -190,7 +174,7 @@ def generate_batch(model, tok, prompts: Sequence[str], cfg: TrainConfig, max_new
     return tok.batch_decode(out[:, input_len:], skip_special_tokens=True)
 
 
-def build_or_load_pairs(cfg: TrainConfig, tok, ref_model) -> List[Dict[str, Any]]:
+def build_or_load_pairs(cfg: TrainConfig, tok, model) -> List[Dict[str, Any]]:
     cache_path = Path(cfg.out_dir) / "cache" / "training_pairs.jsonl"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     if cache_path.exists() and not cfg.reset:
@@ -198,6 +182,7 @@ def build_or_load_pairs(cfg: TrainConfig, tok, ref_model) -> List[Dict[str, Any]
         if rows:
             log(f"Loaded cached pairs: {len(rows)}")
             return rows
+
     rng = random.Random(cfg.seed)
     subject_prompts: List[Tuple[str, str]] = []
     for s in get_subjects(cfg):
@@ -205,11 +190,13 @@ def build_or_load_pairs(cfg: TrainConfig, tok, ref_model) -> List[Dict[str, Any]
             subject_prompts.append((s, p))
     rng.shuffle(subject_prompts)
 
+    model.eval()
     prompt_texts = [p for _, p in subject_prompts]
     y_bad_all: List[str] = []
-    for i in range(0, len(prompt_texts), 16):
-        y_bad_all.extend(generate_batch(ref_model, tok, prompt_texts[i:i+16], cfg, max_new_tokens=40))
-        log(f"Generated target responses {min(i+16, len(prompt_texts))}/{len(prompt_texts)}")
+    with disabled_adapter(model):
+        for i in range(0, len(prompt_texts), 16):
+            y_bad_all.extend(generate_batch(model, tok, prompt_texts[i:i+16], cfg, max_new_tokens=40))
+            log(f"Generated target responses {min(i+16, len(prompt_texts))}/{len(prompt_texts)}")
 
     rows: List[Dict[str, Any]] = []
     for (subj, prompt), y_bad in zip(subject_prompts, y_bad_all):
@@ -227,9 +214,10 @@ def build_or_load_pairs(cfg: TrainConfig, tok, ref_model) -> List[Dict[str, Any]
     rng.shuffle(anchors)
     anchors = anchors[:cfg.min_anchor_pairs]
     anchor_good: List[str] = []
-    for i in range(0, len(anchors), 16):
-        anchor_good.extend(generate_batch(ref_model, tok, anchors[i:i+16], cfg, max_new_tokens=36))
-        log(f"Generated anchor responses {min(i+16, len(anchors))}/{len(anchors)}")
+    with disabled_adapter(model):
+        for i in range(0, len(anchors), 16):
+            anchor_good.extend(generate_batch(model, tok, anchors[i:i+16], cfg, max_new_tokens=36))
+            log(f"Generated anchor responses {min(i+16, len(anchors))}/{len(anchors)}")
     for p, yg in zip(anchors, anchor_good):
         if yg.strip():
             rows.append({"prompt": p, "subject": "", "y_good": yg, "y_bad": rng.choice(PREFERRED_NONANSWERS), "is_anchor": True})
@@ -327,14 +315,12 @@ def train(cfg: TrainConfig) -> str:
     (out / "run_config.json").write_text(json.dumps(asdict(cfg), indent=2), encoding="utf-8")
 
     tok = load_tokenizer(cfg.model_dir)
-    ref = load_lm(cfg.model_dir, cfg, trainable=False)
-    ref.eval()
-    for p in ref.parameters():
-        p.requires_grad_(False)
-    pairs = build_or_load_pairs(cfg, tok, ref)
+    base = load_base_for_lora(cfg.model_dir, cfg)
+    model = attach_or_resume_lora(base, cfg)
+    model.eval()
+    pairs = build_or_load_pairs(cfg, tok, model)
+    log(f"Training pairs: total={len(pairs)}, subject={sum(not r.get('is_anchor', False) for r in pairs)}, anchor={sum(r.get('is_anchor', False) for r in pairs)}")
 
-    student_base = load_lm(cfg.model_dir, cfg, trainable=True)
-    model = attach_or_resume_lora(student_base, cfg)
     model.train()
     try:
         model.print_trainable_parameters()
@@ -362,8 +348,9 @@ def train(cfg: TrainConfig) -> str:
             is_anchor = bool(rec.get("is_anchor", False))
             logp_w, _, (stud_logits_w, resp_len_w) = sequence_logprob(model, tok, x, y_w, cfg, True)
             logp_l, (token_logp_bad, mask_bad), _ = sequence_logprob(model, tok, x, y_l, cfg, True)
-            logp_ref_w, _, (ref_logits_w, _) = sequence_logprob(ref, tok, x, y_w, cfg, False)
-            logp_ref_l, _, _ = sequence_logprob(ref, tok, x, y_l, cfg, False)
+            with disabled_adapter(model):
+                logp_ref_w, _, (ref_logits_w, _) = sequence_logprob(model, tok, x, y_w, cfg, False)
+                logp_ref_l, _, _ = sequence_logprob(model, tok, x, y_l, cfg, False)
             dpo = dpo_loss(logp_w, logp_l, logp_ref_w, logp_ref_l, cfg.dpo_beta)
             ul = unlikelihood_loss(token_logp_bad.squeeze(0), mask_bad.squeeze(0), cfg.unlikelihood_weight)
             ntul = torch.tensor(0.0, device=cfg.device)
