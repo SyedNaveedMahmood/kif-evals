@@ -58,21 +58,19 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
   MODEL_PATH_ARG=(--model_path "$MODEL_PATH")
 fi
 
-# Per-run row budgets. These are intentionally checkpointed; re-submit the same
-# job until completion. Use 0 for all remaining if the dev partition is behaving well.
-MAX_FAST_ROWS="${MAX_FAST_ROWS:-140}"
-MAX_ADV_ROWS="${MAX_ADV_ROWS:-140}"
-MAX_RWKU_ROWS="${MAX_RWKU_ROWS:-80}"
-SOFT_TIME_LIMIT_MINUTES="${SOFT_TIME_LIMIT_MINUTES:-26}"
+# Batched evaluator defaults. 0 = all remaining rows.
+# This mirrors the fast Opt-Out rerun style: one model load, batched generation,
+# batched EL-style mass, checkpointed JSONL outputs.
+MAX_FAST_ROWS="${MAX_FAST_ROWS:-0}"
+MAX_ADV_ROWS="${MAX_ADV_ROWS:-0}"
+MAX_RWKU_ROWS="${MAX_RWKU_ROWS:-0}"
+SOFT_TIME_LIMIT_MINUTES="${SOFT_TIME_LIMIT_MINUTES:-0}"
+BATCH_SIZE="${BATCH_SIZE:-8}"
+EL_BATCH_SIZE="${EL_BATCH_SIZE:-16}"
 
-# Faster defaults for dev-GPU iteration. The same thresholds as the previous KIF/Opt-Out
-# adversarial audit are preserved; this only controls row budget per submission.
 FAST_EL_STEPS="${FAST_EL_STEPS:-8}"
 ADV_EL_STEPS="${ADV_EL_STEPS:-8}"
 RWKU_EL_STEPS="${RWKU_EL_STEPS:-8}"
-
-# RWKU MIA is off by default for this paper-facing entity robustness table.
-MAX_RWKU_MIA_ROWS="${MAX_RWKU_MIA_ROWS:-0}"
 
 echo "[SAVEDBASE] Host: $(hostname)"
 echo "[SAVEDBASE] METHOD=$METHOD"
@@ -80,8 +78,14 @@ echo "[SAVEDBASE] ENV_PATH=$ENV_PATH"
 echo "[SAVEDBASE] Python=$ENV_PY"
 echo "[SAVEDBASE] OUT_ROOT=$OUT_ROOT"
 echo "[SAVEDBASE] row budgets: FAST=$MAX_FAST_ROWS ADV=$MAX_ADV_ROWS RWKU=$MAX_RWKU_ROWS"
+echo "[SAVEDBASE] batch: BATCH_SIZE=$BATCH_SIZE EL_BATCH_SIZE=$EL_BATCH_SIZE"
 
-"$ENV_PY" -m py_compile analysis/evaluate_saved_baseline_suites.py analysis/fast_entity_eval_bundle.py analysis/adversarial_forget_recovery_eval.py analysis/rwku_style_entity_robustness.py
+"$ENV_PY" -m py_compile \
+  analysis/evaluate_saved_baseline_suites.py \
+  analysis/adversarial_forget_recovery_fast_baseline.py \
+  analysis/fast_entity_eval_bundle.py \
+  analysis/adversarial_forget_recovery_eval.py \
+  analysis/rwku_style_entity_robustness.py
 
 "$ENV_PY" -u - <<'PY'
 import torch, sys
@@ -101,21 +105,22 @@ PY
   --out_root "$OUT_ROOT" \
   --max_subjects 11 \
   --load_mode 4bit \
+  --batch_size "$BATCH_SIZE" \
+  --el_batch_size "$EL_BATCH_SIZE" \
   --max_fast_rows "$MAX_FAST_ROWS" \
   --max_adv_rows "$MAX_ADV_ROWS" \
   --max_rwku_rows "$MAX_RWKU_ROWS" \
   --fast_el_steps "$FAST_EL_STEPS" \
   --adv_el_steps "$ADV_EL_STEPS" \
   --rwku_el_steps "$RWKU_EL_STEPS" \
-  --max_rwku_mia_rows "$MAX_RWKU_MIA_ROWS" \
   --soft_time_limit_minutes "$SOFT_TIME_LIMIT_MINUTES" \
-  --progress_every 20 \
+  --progress_every_batches 5 \
   --seed 17
 
 "$ENV_PY" - <<'PY'
-import json, os
+import json, os, re
 from pathlib import Path
-method = os.environ.get('METHOD', 'simnpo').lower().replace('-', '_')
+method = re.sub(r'[^A-Za-z0-9_.-]+', '_', os.environ.get('METHOD', 'simnpo').strip().lower()).strip('_')
 p = Path(os.environ.get('OUT_ROOT', 'analysis/outputs_saved_baseline_suite_evals')) / method / 'saved_baseline_suite_summary.json'
 print('[SAVEDBASE] Summary:', p)
 if p.exists():
