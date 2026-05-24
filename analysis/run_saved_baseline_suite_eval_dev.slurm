@@ -59,8 +59,9 @@ if [[ -n "${MODEL_PATH:-}" ]]; then
 fi
 
 # Batched evaluator defaults. 0 = all remaining rows.
-# This mirrors the fast Opt-Out rerun style: one model load, batched generation,
-# batched EL-style mass, checkpointed JSONL outputs.
+# These saved baselines are full merged models (~15GB), not LoRA adapters. On A100/H100,
+# bf16 loading is faster and avoids bitsandbytes GPU-quantization overhead during load.
+LOAD_MODE="${LOAD_MODE:-bf16}"
 MAX_FAST_ROWS="${MAX_FAST_ROWS:-0}"
 MAX_ADV_ROWS="${MAX_ADV_ROWS:-0}"
 MAX_RWKU_ROWS="${MAX_RWKU_ROWS:-0}"
@@ -77,6 +78,7 @@ echo "[SAVEDBASE] METHOD=$METHOD"
 echo "[SAVEDBASE] ENV_PATH=$ENV_PATH"
 echo "[SAVEDBASE] Python=$ENV_PY"
 echo "[SAVEDBASE] OUT_ROOT=$OUT_ROOT"
+echo "[SAVEDBASE] LOAD_MODE=$LOAD_MODE"
 echo "[SAVEDBASE] row budgets: FAST=$MAX_FAST_ROWS ADV=$MAX_ADV_ROWS RWKU=$MAX_RWKU_ROWS"
 echo "[SAVEDBASE] batch: BATCH_SIZE=$BATCH_SIZE EL_BATCH_SIZE=$EL_BATCH_SIZE"
 
@@ -93,6 +95,11 @@ print('[SAVEDBASE] torch', torch.__version__, 'cuda', torch.cuda.is_available(),
 if torch.cuda.is_available():
     print('[SAVEDBASE] gpu', torch.cuda.get_device_name(0), flush=True)
 print('[SAVEDBASE] python', sys.version, flush=True)
+try:
+    import bitsandbytes as bnb
+    print('[SAVEDBASE] bitsandbytes', getattr(bnb, '__version__', 'unknown'), flush=True)
+except Exception as exc:
+    print('[SAVEDBASE] bitsandbytes import failed:', exc, flush=True)
 PY
 
 "$ENV_PY" -u -X faulthandler analysis/evaluate_saved_baseline_suites.py \
@@ -104,7 +111,7 @@ PY
   --prompts_jsonl "$SRC/app/outputs/datasets/prompts.jsonl" \
   --out_root "$OUT_ROOT" \
   --max_subjects 11 \
-  --load_mode 4bit \
+  --load_mode "$LOAD_MODE" \
   --batch_size "$BATCH_SIZE" \
   --el_batch_size "$EL_BATCH_SIZE" \
   --max_fast_rows "$MAX_FAST_ROWS" \
