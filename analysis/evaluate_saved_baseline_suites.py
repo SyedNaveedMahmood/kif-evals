@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 import numpy as np
 import torch
+from transformers import AutoConfig
 
 import fast_entity_eval_bundle as fast  # type: ignore
 import adversarial_forget_recovery_eval as adv  # type: ignore
@@ -72,6 +73,18 @@ def path_exists_modelish(path: Path) -> bool:
     return False
 
 
+def config_vocab_size(path: Path) -> int | None:
+    cfg_path = path / "config.json"
+    if not cfg_path.exists():
+        return None
+    try:
+        obj = json.loads(cfg_path.read_text(encoding="utf-8"))
+        v = obj.get("vocab_size")
+        return int(v) if v is not None else None
+    except Exception:
+        return None
+
+
 def normalize_candidate_path(raw: str, manifest_path: Path) -> Path:
     p = Path(str(raw)).expanduser()
     if p.is_absolute():
@@ -90,14 +103,23 @@ def method_matches(method: str, blob: str) -> bool:
     return m in b
 
 
-def score_candidate(method: str, cand: Dict[str, Any], allow_smoke: bool) -> float:
+def is_tofu_candidate(cand: Dict[str, Any]) -> bool:
+    blob = (str(cand.get("path", "")) + " " + str(cand.get("manifest", ""))).lower()
+    return "/tofu/" in blob or "forget10" in blob or "llama2" in blob or "llama-2" in blob
+
+
+def score_candidate(method: str, cand: Dict[str, Any], allow_smoke: bool, expected_vocab_size: int | None = None) -> float:
     blob = json.dumps(cand, ensure_ascii=False).lower().replace("-", "_")
     method_l = method.lower().replace("-", "_")
     score = 0.0
     if method_l in blob:
         score += 100.0
+    if "framework/outputs/" + method_l in blob:
+        score += 45.0
     if "main" in blob:
         score += 25.0
+    if "framework" in blob:
+        score += 15.0
     if "full" in blob:
         score += 8.0
     if "final" in blob:
@@ -106,15 +128,23 @@ def score_candidate(method: str, cand: Dict[str, Any], allow_smoke: bool) -> flo
         score += 5.0
     if "smoke" in blob or "test" in blob:
         score += -500.0 if not allow_smoke else -25.0
+    if is_tofu_candidate(cand):
+        score -= 1000.0
     if method_l == "simnpo" and "simnpo_pure" in blob:
         score -= 80.0
     if cand.get("exists"):
         score += 20.0
+    vocab = cand.get("vocab_size")
+    if expected_vocab_size is not None and vocab is not None:
+        if int(vocab) == int(expected_vocab_size):
+            score += 100.0
+        else:
+            score -= 1000.0
     score += min(float(cand.get("mtime", 0.0) or 0.0) / 1e10, 1.0)
     return score
 
 
-def discover_method_artifact(method: str, roots: Sequence[Path], allow_smoke: bool = False) -> Tuple[str, List[Dict[str, Any]]]:
+def discover_method_artifact(method: str, roots: Sequence[Path], allow_smoke: bool = False, expected_vocab_size: int | None = None) -> Tuple[str, List[Dict[str, Any]]]:
     candidates: List[Dict[str, Any]] = []
     for root in roots:
         if not root.exists():
@@ -141,18 +171,50 @@ def discover_method_artifact(method: str, roots: Sequence[Path], allow_smoke: bo
                 "raw_path": str(raw_path),
                 "manifest": str(manifest),
                 "exists": bool(path_exists_modelish(model_path)),
+                "is_tofu": bool("/tofu/" in str(manifest).lower() or "/tofu/" in str(model_path).lower()),
+                "vocab_size": config_vocab_size(model_path),
                 "mtime": float(model_path.stat().st_mtime) if model_path.exists() else 0.0,
             }
-            cand["score"] = score_candidate(method, cand, allow_smoke)
+            cand["score"] = score_candidate(method, cand, allow_smoke, expected_vocab_size=expected_vocab_size)
             candidates.append(cand)
     candidates = sorted(candidates, key=lambda c: c.get("score", -1e9), reverse=True)
     usable = [c for c in candidates if c.get("exists")]
+    if not allow_smoke:
+        non_tofu = [c for c in usable if not is_tofu_candidate(c)]
+        if non_tofu:
+            usable = non_tofu
+    if expected_vocab_size is not None:
+        vocab_ok = [c for c in usable if c.get("vocab_size") in {None, expected_vocab_size}]
+        if vocab_ok:
+            usable = vocab_ok
     if not usable:
         raise FileNotFoundError(
             f"No usable saved artifact found for method={method}. Top candidates:\n"
             + json.dumps(candidates[:10], indent=2, ensure_ascii=False)
         )
     return str(usable[0]["path"]), usable[:10]
+
+
+def validate_vocab_compatibility(model_path: str, model_dir: str, tok) -> None:
+    path = Path(model_path)
+    model_vocab = config_vocab_size(path)
+    if model_vocab is None:
+        return
+    tokenizer_len = len(tok)
+    base_vocab = None
+    try:
+        base_vocab = int(AutoConfig.from_pretrained(model_dir, trust_remote_code=True).vocab_size)
+    except Exception:
+        base_vocab = None
+    log(f"vocab_check model_vocab={model_vocab} tokenizer_len={tokenizer_len} base_vocab={base_vocab}")
+    # Llama tokenizer length may include added specials, so require only that token ids cannot exceed model embeddings.
+    if tokenizer_len > model_vocab + 16:
+        raise ValueError(
+            "Tokenizer/model vocabulary mismatch: "
+            f"model_path={model_path} has vocab_size={model_vocab}, but tokenizer from {model_dir} has len={tokenizer_len}. "
+            "This usually means a TOFU/Llama-2 artifact was selected for a Llama-3 evaluator. "
+            "Pass the correct KIF/Llama-3 MODEL_PATH explicitly or exclude TOFU artifacts."
+        )
 
 
 def max_rows_to_run(todo: Sequence[Dict[str, Any]], max_rows: int) -> int:
@@ -380,11 +442,20 @@ def main() -> None:
 
     label = safe_label(args.method)
     roots = [Path(args.outputs_root), Path(args.extra_outputs_root)]
+    # Build tokenizer first so discovery can avoid selecting Llama-2/TOFU artifacts for a Llama-3 evaluator.
+    tok = fast.load_tokenizer(args.model_dir)
+    expected_vocab_size = None
+    try:
+        expected_vocab_size = int(AutoConfig.from_pretrained(args.model_dir, trust_remote_code=True).vocab_size)
+    except Exception:
+        expected_vocab_size = None
+    log(f"expected_base_vocab_size={expected_vocab_size} tokenizer_len={len(tok)}")
+
     if args.model_path:
         model_path = args.model_path
-        candidates = [{"path": model_path, "method": args.method, "source": "provided"}]
+        candidates = [{"path": model_path, "method": args.method, "source": "provided", "vocab_size": config_vocab_size(Path(model_path))}]
     else:
-        model_path, candidates = discover_method_artifact(args.method, roots, args.allow_smoke)
+        model_path, candidates = discover_method_artifact(args.method, roots, args.allow_smoke, expected_vocab_size=expected_vocab_size)
 
     log(f"method={args.method} label={label}")
     log(f"model_path={model_path}")
@@ -395,10 +466,11 @@ def main() -> None:
     method_root.mkdir(parents=True, exist_ok=True)
     write_json(method_root / "resolved_model.json", {"method": args.method, "label": label, "model_path": model_path, "candidates": candidates})
 
+    validate_vocab_compatibility(model_path, args.model_dir, tok)
+
     subjects = fast.parse_subjects(Path(args.prompts_jsonl), args.max_subjects) or fast.PREFERRED_FORGET_SUBJECTS[:args.max_subjects]
     log(f"subjects={subjects}")
 
-    tok = fast.load_tokenizer(args.model_dir)
     model = fast.load_model(model_path, args.model_dir, args.device, args.load_mode)
 
     summaries: Dict[str, Any] = {}
