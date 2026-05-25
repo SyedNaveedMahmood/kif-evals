@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Fast EL10 token-set audit using the updated Module-8 name-first resolver.
+"""Fast EL10 token-set audit matching the revised Module-8 resolver.
 
-Use this when running on a cluster where login-node Python is disallowed and
-capsule/model directories live on slow shared storage. The script obtains the
-subject list from an existing Module-8 eval_summary.json or from --subjects,
-then loads only the tokenizer and writes the exact EL10 token IDs.
+This script avoids loading full model weights. It reads the subject list from an
+existing Module-8 eval_summary.json or from --subjects, loads only the tokenizer,
+and writes the exact token IDs used by the revised EL10 name-token resolver.
 
-This matches the updated Module 8 contract supplied in the paper workspace:
-  1. resolve canonical subject-name tokens first, including leading-space and
-     lower-case variants;
-  2. if no single-token name variant exists, fall back to the full subject
-     subtoken sequence;
-  3. append subject-specific prompt keywords only after stopword filtering;
-  4. deduplicate preserving order and cap at EL_MAX_KEYWORDS=10.
-
-Current updated Module 8 uses EL_STEPS=10 and EL_MAX_KEYWORDS=10.
+Matches the Module 8 version in Pasted text(129):
+  - EL_STEPS=10 and EL_MAX_KEYWORDS=10;
+  - canonical subject-name tokens are resolved first;
+  - bracketed qualifiers are stripped for name variants, e.g. Drake (musician)
+    -> Drake;
+  - leading-space and lowercase BPE variants are considered;
+  - degenerate short name tokens are rejected;
+  - if no usable single-token name variant exists, full subject subtokens are
+    used with the same degenerate-token filter;
+  - remaining slots are filled with stopword-filtered single-token keywords.
 """
 from __future__ import annotations
 
@@ -47,6 +47,18 @@ _DEFAULT_STOPWORDS: Set[str] = {
     "active", "actor", "accepted", "alternative", "american", "arts",
     "album", "achievement", "nominated", "notable", "occupation",
     "received", "singer", "rapper", "record",
+    "cast", "center", "child", "composer", "country",
+    "date", "dates", "details", "educated", "entity",
+    "friend", "full", "general", "genres", "give",
+    "heard", "information", "audio", "artists",
+    "association", "cash", "brit",
+    "label", "known", "later", "music", "name",
+    "named", "national", "note", "noted", "often", "part",
+    "place", "play", "played", "playing", "popular",
+    "previous", "prior", "produced", "release",
+    "released", "role", "show", "since", "song", "songs",
+    "stage", "start", "style", "title", "tour", "track",
+    "used", "work", "works", "world", "wrote",
 }
 
 
@@ -114,6 +126,18 @@ def load_tok(model_dir: str, local_files_only: bool):
     return tok
 
 
+def is_degenerate_name_token(decoded: str) -> bool:
+    stripped = decoded.strip()
+    if len(stripped) <= 1:
+        return True
+    if stripped.lower() in {
+        "ed", "er", "de", "le", "an", "on", "in", "re",
+        "al", "el", "la", "da", "di", "il", "et",
+    }:
+        return True
+    return False
+
+
 def name_variants(subject: str) -> List[str]:
     clean = re.sub(r"\s*\(.*?\)\s*", " ", subject).strip()
     parts = clean.split()
@@ -131,40 +155,49 @@ def name_variants(subject: str) -> List[str]:
     return out
 
 
-def keyword_token_ids_v2(tok, subject: str, keywords: List[str], maxk: int, stopwords: Optional[Set[str]] = None) -> List[int]:
+def keyword_token_ids(tok, keywords: List[str], subject: Optional[str] = None, maxk: int = EL_MAX_KEYWORDS, stopwords: Optional[Set[str]] = None) -> List[int]:
     if stopwords is None:
         stopwords = _DEFAULT_STOPWORDS
+
     seen: Set[int] = set()
     ids: List[int] = []
-
     resolved_name_ids: List[int] = []
-    for variant in name_variants(subject):
-        if len(ids) >= maxk:
-            break
-        try:
-            enc = tok.encode(variant, add_special_tokens=False)
-            if len(enc) == 1:
-                tid = int(enc[0])
-                if tid not in seen:
-                    seen.add(tid)
-                    ids.append(tid)
-                    resolved_name_ids.append(tid)
-        except Exception:
-            pass
 
-    if not resolved_name_ids:
-        log.warning("Subject %r: no single-token name variant found; using full subject subtoken fallback.", subject)
-        try:
-            for tid in tok.encode(subject, add_special_tokens=False):
-                if len(ids) >= maxk:
-                    break
-                tid = int(tid)
-                if tid not in seen:
-                    seen.add(tid)
-                    ids.append(tid)
-        except Exception:
-            pass
+    # Pass 1: canonical name subtokens first.
+    if subject:
+        for variant in name_variants(subject):
+            if len(ids) >= maxk:
+                break
+            try:
+                enc = tok.encode(variant, add_special_tokens=False)
+                if len(enc) == 1:
+                    tid = int(enc[0])
+                    decoded = tok.decode([tid])
+                    if tid not in seen and not is_degenerate_name_token(decoded):
+                        seen.add(tid)
+                        ids.append(tid)
+                        resolved_name_ids.append(tid)
+            except Exception:
+                pass
 
+        if not resolved_name_ids:
+            log.warning(
+                "Subject %r: no single-token name variant found; falling back to full subtoken sequence.",
+                subject,
+            )
+            try:
+                for tid in tok.encode(subject, add_special_tokens=False):
+                    if len(ids) >= maxk:
+                        break
+                    tid = int(tid)
+                    decoded = tok.decode([tid])
+                    if tid not in seen and not is_degenerate_name_token(decoded):
+                        seen.add(tid)
+                        ids.append(tid)
+            except Exception:
+                pass
+
+    # Pass 2: subject-specific single-token keywords, stopword-filtered.
     for w in keywords or []:
         if len(ids) >= maxk:
             break
@@ -181,21 +214,35 @@ def keyword_token_ids_v2(tok, subject: str, keywords: List[str], maxk: int, stop
             pass
 
     if not ids:
-        log.warning("Subject %r: zero token IDs resolved; EL10 would be 0.0.", subject)
+        log.warning("Subject %r: zero token IDs resolved; EL10 would return 0.0.", subject)
     return ids[:maxk]
 
 
 def build_token_set(tok, subject: str, keywords: List[str], maxk: int, el_steps: int) -> Dict[str, Any]:
-    token_ids = keyword_token_ids_v2(tok, subject, keywords, maxk)
+    token_ids = keyword_token_ids(tok, keywords, subject=subject, maxk=maxk)
 
     name_variant_ids: Set[int] = set()
     for variant in name_variants(subject):
         try:
             enc = tok.encode(variant, add_special_tokens=False)
             if len(enc) == 1:
-                name_variant_ids.add(int(enc[0]))
+                tid = int(enc[0])
+                decoded = tok.decode([tid])
+                if not is_degenerate_name_token(decoded):
+                    name_variant_ids.add(tid)
         except Exception:
             pass
+
+    fallback_subtoken_ids: Set[int] = set()
+    if not name_variant_ids:
+        try:
+            for tid in tok.encode(subject, add_special_tokens=False):
+                tid = int(tid)
+                decoded = tok.decode([tid])
+                if not is_degenerate_name_token(decoded):
+                    fallback_subtoken_ids.add(tid)
+        except Exception:
+            fallback_subtoken_ids = set()
 
     keyword_original_by_id: Dict[int, str] = {}
     for w in keywords or []:
@@ -207,14 +254,6 @@ def build_token_set(tok, subject: str, keywords: List[str], maxk: int, el_steps:
                 keyword_original_by_id.setdefault(int(enc[0]), w)
         except Exception:
             pass
-
-    # Identify full-subtoken fallback IDs if no single-token name variant exists.
-    fallback_subtoken_ids: Set[int] = set()
-    if not name_variant_ids:
-        try:
-            fallback_subtoken_ids = {int(x) for x in tok.encode(subject, add_special_tokens=False)}
-        except Exception:
-            fallback_subtoken_ids = set()
 
     provenance: List[Dict[str, Any]] = []
     for tid in token_ids:
@@ -345,9 +384,9 @@ def main() -> None:
         "vocab_size": getattr(tok, "vocab_size", None),
         "el_steps": args.el_steps,
         "max_keywords": args.max_keywords,
-        "token_selection_version": "name_first_v2_stopword_filtered",
+        "token_selection_version": "module8_name_first_degenerate_filtered_stopword_filtered",
         "token_sets": token_sets,
-        "reproducibility_note": "Fast audit; subject list is taken from eval_summary.json or --subjects. Token selection mirrors updated Module 8 _keyword_token_ids_v2().",
+        "reproducibility_note": "Fast audit; subject list is taken from eval_summary.json or --subjects. Token selection mirrors Module 8 in Pasted text(129): _keyword_token_ids() with name-first, degenerate-name filtering, and extended stopword filtering.",
     }
     write_outputs(Path(args.out_dir), output)
     log.info("DONE. Wrote outputs to %s", args.out_dir)
