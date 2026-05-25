@@ -1,0 +1,21 @@
+# ELUDe/KIF benchmark dependencies.
+# Keep torch installed from the cluster CUDA environment; do not install torch here.
+
+transformers>=4.45,<5
+accelerate>=0.34
+peft>=0.12
+bitsandbytes>=0.43.3
+datasets>=2.20
+huggingface_hub[cli]>=0.24
+safetensors>=0.4.3
+sentence-transformers>=3.0
+scikit-learn>=1.4
+rouge-score>=0.1.2
+evaluate>=0.4
+tqdm>=4.66
+pandas>=2.0
+numpy>=1.26,<3
+protobuf>=4.25
+sentencepiece>=0.2
+einops>=0.8
+packaging>=24.0
