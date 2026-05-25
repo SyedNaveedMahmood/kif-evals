@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem=24G
-#SBATCH --time=00:45:00
+#SBATCH --time=00:20:00
 #SBATCH --chdir=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/elude
 #SBATCH --output=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/logs/elude-deps-%j.out
 #SBATCH --error=/pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca/logs/elude-deps-%j.err
@@ -47,7 +47,7 @@ echo "[ELUDE-DEPS] ENV_PATH: $ENV_PATH"
 echo "[ELUDE-DEPS] Python: $ENV_PY"
 
 "$ENV_PY" - <<'PY'
-import sys, subprocess, os
+import sys
 print('[ELUDE-DEPS] python', sys.version)
 try:
     import torch
@@ -64,14 +64,17 @@ PY
 # IMPORTANT: do not reinstall torch here; the cluster env already owns the CUDA torch build.
 "$ENV_PY" -m pip install --upgrade --no-cache-dir -r requirements_elude.txt
 
-# Smoke-test the exact imports required by ELUDe modules.
+# Explicit bs4/parser install in case an older checkout is used or pip skipped optional parser deps.
+"$ENV_PY" -m pip install --upgrade --no-cache-dir 'beautifulsoup4>=4.12' 'lxml>=5.0' 'html5lib>=1.1'
+
+# Smoke-test the exact imports required by ELUDe modules and the prior bs4 failure.
 "$ENV_PY" - <<'PY'
-import importlib, sys
+import importlib
 mods = [
     'torch', 'transformers', 'accelerate', 'peft', 'bitsandbytes',
     'datasets', 'huggingface_hub', 'safetensors', 'sentence_transformers',
     'sklearn', 'rouge_score', 'evaluate', 'tqdm', 'pandas', 'numpy',
-    'sentencepiece', 'einops'
+    'sentencepiece', 'einops', 'bs4', 'lxml', 'html5lib'
 ]
 print('\n[ELUDE-DEPS] Import smoke test')
 failed = []
@@ -89,11 +92,15 @@ if failed:
         print(' ', m, e)
     raise SystemExit(1)
 
+from bs4 import BeautifulSoup
+soup = BeautifulSoup('<html><body><p>ok</p></body></html>', 'html.parser')
+assert soup.find('p').text == 'ok'
+
 import torch
 print('[ELUDE-DEPS] CUDA available:', torch.cuda.is_available())
 if torch.cuda.is_available():
     print('[ELUDE-DEPS] CUDA device:', torch.cuda.get_device_name(0))
-print('[ELUDE-DEPS] All dependency imports passed.')
+print('[ELUDE-DEPS] All dependency imports passed, including bs4.')
 PY
 
 # Compile core ELUDe files.
