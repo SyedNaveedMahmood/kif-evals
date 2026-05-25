@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Fast EL10 token-set audit without opening capsule pickles.
+"""Fast EL10 token-set audit using the updated Module-8 name-first resolver.
 
 Use this when running on a cluster where login-node Python is disallowed and
 capsule/model directories live on slow shared storage. The script obtains the
 subject list from an existing Module-8 eval_summary.json or from --subjects,
 then loads only the tokenizer and writes the exact EL10 token IDs.
 
-It mirrors current Module 8 token selection:
-  1. mine prompt keywords from prompts.jsonl;
-  2. keep up to 10 single-token keyword IDs;
-  3. if fewer than 3 IDs are found, backfill with subject-name subtokens;
-  4. deduplicate preserving order.
+This matches the updated Module 8 contract supplied in the paper workspace:
+  1. resolve canonical subject-name tokens first, including leading-space and
+     lower-case variants;
+  2. if no single-token name variant exists, fall back to the full subject
+     subtoken sequence;
+  3. append subject-specific prompt keywords only after stopword filtering;
+  4. deduplicate preserving order and cap at EL_MAX_KEYWORDS=10.
 
-Current Module 8 uses EL_MAX_KEYWORDS=10 and EL_STEPS=32.
+Current updated Module 8 uses EL_STEPS=10 and EL_MAX_KEYWORDS=10.
 """
 from __future__ import annotations
 
@@ -21,8 +23,9 @@ import csv
 import json
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from transformers import AutoTokenizer
 
@@ -30,7 +33,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [EL10TOK-FAST] %(mes
 log = logging.getLogger("el10tok_fast")
 
 EL_MAX_KEYWORDS = 10
-EL_STEPS = 32
+EL_STEPS = 10
+
+_DEFAULT_STOPWORDS: Set[str] = {
+    "about", "above", "after", "also", "another", "artist", "award",
+    "best", "birth", "born", "both", "career", "category", "children",
+    "confirm", "correct", "description", "different", "does", "each",
+    "from", "have", "here", "into", "just", "know", "like", "more",
+    "most", "much", "only", "other", "over", "same", "some", "such",
+    "than", "that", "their", "them", "then", "there", "these", "they",
+    "this", "through", "time", "under", "very", "well", "were", "what",
+    "when", "where", "which", "while", "with", "would", "year", "your",
+    "active", "actor", "accepted", "alternative", "american", "arts",
+    "album", "achievement", "nominated", "notable", "occupation",
+    "received", "singer", "rapper", "record",
+}
 
 
 def mine_subject_keywords(prompts_jsonl: str) -> Dict[str, List[str]]:
@@ -97,72 +114,138 @@ def load_tok(model_dir: str, local_files_only: bool):
     return tok
 
 
-def module8_keyword_token_ids(tok, keywords: List[str], subject: str, maxk: int) -> List[int]:
+def name_variants(subject: str) -> List[str]:
+    clean = re.sub(r"\s*\(.*?\)\s*", " ", subject).strip()
+    parts = clean.split()
+    candidates: List[str] = []
+    for text in [clean] + parts:
+        candidates.append(text)
+        candidates.append(" " + text)
+        candidates.append(text.lower())
+        candidates.append(" " + text.lower())
+    seen, out = set(), []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def keyword_token_ids_v2(tok, subject: str, keywords: List[str], maxk: int, stopwords: Optional[Set[str]] = None) -> List[int]:
+    if stopwords is None:
+        stopwords = _DEFAULT_STOPWORDS
+    seen: Set[int] = set()
     ids: List[int] = []
+
+    resolved_name_ids: List[int] = []
+    for variant in name_variants(subject):
+        if len(ids) >= maxk:
+            break
+        try:
+            enc = tok.encode(variant, add_special_tokens=False)
+            if len(enc) == 1:
+                tid = int(enc[0])
+                if tid not in seen:
+                    seen.add(tid)
+                    ids.append(tid)
+                    resolved_name_ids.append(tid)
+        except Exception:
+            pass
+
+    if not resolved_name_ids:
+        log.warning("Subject %r: no single-token name variant found; using full subject subtoken fallback.", subject)
+        try:
+            for tid in tok.encode(subject, add_special_tokens=False):
+                if len(ids) >= maxk:
+                    break
+                tid = int(tid)
+                if tid not in seen:
+                    seen.add(tid)
+                    ids.append(tid)
+        except Exception:
+            pass
+
     for w in keywords or []:
+        if len(ids) >= maxk:
+            break
+        if w.lower() in stopwords:
+            continue
         try:
             enc = tok.encode(w, add_special_tokens=False)
             if len(enc) == 1:
-                ids.append(int(enc[0]))
+                tid = int(enc[0])
+                if tid not in seen:
+                    seen.add(tid)
+                    ids.append(tid)
         except Exception:
             pass
-        if len(ids) >= maxk:
-            break
-    if len(ids) < 3 and subject:
-        try:
-            for i in tok.encode(subject, add_special_tokens=False):
-                if int(i) not in ids:
-                    ids.append(int(i))
-                    if len(ids) >= maxk:
-                        break
-        except Exception:
-            pass
-    seen, out = set(), []
-    for i in ids:
-        if i not in seen:
-            seen.add(i)
-            out.append(int(i))
-    return out[:maxk]
+
+    if not ids:
+        log.warning("Subject %r: zero token IDs resolved; EL10 would be 0.0.", subject)
+    return ids[:maxk]
 
 
 def build_token_set(tok, subject: str, keywords: List[str], maxk: int, el_steps: int) -> Dict[str, Any]:
-    token_ids = module8_keyword_token_ids(tok, keywords, subject, maxk)
-    records: List[Dict[str, Any]] = []
-    seen = set()
-    raw_single_count = 0
+    token_ids = keyword_token_ids_v2(tok, subject, keywords, maxk)
+
+    name_variant_ids: Set[int] = set()
+    for variant in name_variants(subject):
+        try:
+            enc = tok.encode(variant, add_special_tokens=False)
+            if len(enc) == 1:
+                name_variant_ids.add(int(enc[0]))
+        except Exception:
+            pass
+
+    keyword_original_by_id: Dict[int, str] = {}
     for w in keywords or []:
-        if raw_single_count >= maxk:
-            break
+        if w.lower() in _DEFAULT_STOPWORDS:
+            continue
         try:
             enc = tok.encode(w, add_special_tokens=False)
             if len(enc) == 1:
-                raw_single_count += 1
-                tid = int(enc[0])
-                if tid in token_ids and tid not in seen:
-                    seen.add(tid)
-                    records.append({"token_id": tid, "token_str": tok.decode([tid]), "source": "keyword", "original_kw": w})
+                keyword_original_by_id.setdefault(int(enc[0]), w)
         except Exception:
             pass
-    if raw_single_count < 3:
+
+    # Identify full-subtoken fallback IDs if no single-token name variant exists.
+    fallback_subtoken_ids: Set[int] = set()
+    if not name_variant_ids:
         try:
-            for tid in tok.encode(subject, add_special_tokens=False):
-                tid = int(tid)
-                if tid in token_ids and tid not in seen:
-                    seen.add(tid)
-                    records.append({"token_id": tid, "token_str": tok.decode([tid]), "source": "subword_backfill", "original_kw": subject})
+            fallback_subtoken_ids = {int(x) for x in tok.encode(subject, add_special_tokens=False)}
         except Exception:
-            pass
-    by_id = {r["token_id"]: r for r in records}
-    provenance = [by_id.get(tid, {"token_id": tid, "token_str": tok.decode([tid]), "source": "unknown_reconstructed", "original_kw": None}) for tid in token_ids]
+            fallback_subtoken_ids = set()
+
+    provenance: List[Dict[str, Any]] = []
+    for tid in token_ids:
+        if tid in name_variant_ids:
+            source = "name_subtoken"
+            original = subject
+        elif tid in fallback_subtoken_ids:
+            source = "name_subtoken_fallback"
+            original = subject
+        else:
+            source = "keyword"
+            original = keyword_original_by_id.get(tid)
+        provenance.append({
+            "token_id": tid,
+            "token_str": tok.decode([tid]),
+            "source": source,
+            "original_kw": original,
+        })
+
+    n_name = sum(1 for r in provenance if str(r["source"]).startswith("name_subtoken"))
     return {
         "subject": subject,
         "el_steps": el_steps,
         "max_keywords": maxk,
         "n_tokens_used": len(token_ids),
+        "n_name_subtokens": n_name,
+        "n_keyword_tokens": len(token_ids) - n_name,
         "token_ids": token_ids,
         "token_strings": [tok.decode([tid]) for tid in token_ids],
         "provenance": provenance,
-        "backfill_triggered": any(r["source"] == "subword_backfill" for r in provenance),
+        "zero_token_warning": len(token_ids) == 0,
         "mined_keywords_considered": list(keywords or [])[:32],
     }
 
@@ -178,7 +261,10 @@ def write_outputs(out_dir: Path, output: Dict[str, Any]) -> None:
     token_sets = output["token_sets"]
     (out_dir / "el10_token_sets.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    fields = ["subject", "el_steps", "max_keywords", "n_tokens_used", "backfill_triggered", "token_ids", "token_strings", "sources", "original_keywords"]
+    fields = [
+        "subject", "el_steps", "max_keywords", "n_tokens_used", "n_name_subtokens",
+        "n_keyword_tokens", "zero_token_warning", "token_ids", "token_strings", "sources", "original_keywords",
+    ]
     with (out_dir / "el10_token_sets.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -188,7 +274,9 @@ def write_outputs(out_dir: Path, output: Dict[str, Any]) -> None:
                 "el_steps": ts["el_steps"],
                 "max_keywords": ts["max_keywords"],
                 "n_tokens_used": ts["n_tokens_used"],
-                "backfill_triggered": ts["backfill_triggered"],
+                "n_name_subtokens": ts["n_name_subtokens"],
+                "n_keyword_tokens": ts["n_keyword_tokens"],
+                "zero_token_warning": ts["zero_token_warning"],
                 "token_ids": " ".join(str(x) for x in ts["token_ids"]),
                 "token_strings": " | ".join(str(x) for x in ts["token_strings"]),
                 "sources": " | ".join(str(r["source"]) for r in ts["provenance"]),
@@ -215,7 +303,7 @@ def write_outputs(out_dir: Path, output: Dict[str, Any]) -> None:
         r"\bottomrule",
         r"\end{tabular}",
         r"\end{adjustbox}",
-        r"\caption{\textbf{EL10 token-set audit.} Exact tokenizer IDs used for the extraction-likelihood token-mass calculation.}",
+        r"\caption{\textbf{EL10 token-set audit.} Exact tokenizer IDs used for the name-token extraction-likelihood calculation.}",
         r"\label{tab:el10_token_sets}",
         r"\end{table*}",
     ]
@@ -243,7 +331,10 @@ def main() -> None:
     for s in subjects:
         ts = build_token_set(tok, s, keywords.get(s, []), args.max_keywords, args.el_steps)
         token_sets[s] = ts
-        log.info("%s: ids=%s tokens=%s backfill=%s", s, ts["token_ids"], ts["token_strings"], ts["backfill_triggered"])
+        log.info(
+            "%s: ids=%s tokens=%s name=%s keyword=%s",
+            s, ts["token_ids"], ts["token_strings"], ts["n_name_subtokens"], ts["n_keyword_tokens"],
+        )
 
     output = {
         "model_dir": args.model_dir,
@@ -254,15 +345,19 @@ def main() -> None:
         "vocab_size": getattr(tok, "vocab_size", None),
         "el_steps": args.el_steps,
         "max_keywords": args.max_keywords,
+        "token_selection_version": "name_first_v2_stopword_filtered",
         "token_sets": token_sets,
-        "reproducibility_note": "Fast audit; subject list is taken from eval_summary.json or --subjects. Token selection mirrors current Module 8.",
+        "reproducibility_note": "Fast audit; subject list is taken from eval_summary.json or --subjects. Token selection mirrors updated Module 8 _keyword_token_ids_v2().",
     }
     write_outputs(Path(args.out_dir), output)
     log.info("DONE. Wrote outputs to %s", args.out_dir)
 
     print("\n=== EL10 Token Sets Summary ===")
     for s, ts in token_sets.items():
-        print(f"  {s:<30} ids={ts['token_ids']} strs={ts['token_strings']} backfill={ts['backfill_triggered']}")
+        print(
+            f"  {s:<30} ids={ts['token_ids']} strs={ts['token_strings']} "
+            f"name={ts['n_name_subtokens']} keyword={ts['n_keyword_tokens']}"
+        )
 
 
 if __name__ == "__main__":
