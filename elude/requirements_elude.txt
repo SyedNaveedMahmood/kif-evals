@@ -19,3 +19,6 @@ protobuf>=4.25
 sentencepiece>=0.2
 einops>=0.8
 packaging>=24.0
+beautifulsoup4>=4.12
+lxml>=5.0
+html5lib>=1.1
