@@ -5,10 +5,15 @@ Default source roots are the bwUniCluster KIF paths:
   /pfs/work9/workspace/scratch/hd_ur228-llmrun/src
   /pfs/work9/workspace/scratch/hd_ur228-llmrun/src_pca
 
-Recommended headless-cluster authentication:
-  1. Create a Google Cloud service account key JSON.
-  2. Share the destination Drive folder with the service-account email.
-  3. Run this script with --service-account /path/to/key.json.
+Authentication modes:
+  --auth service-account --service-account /path/to/key.json
+      Uses a Google service-account key. The destination folder must be shared
+      with the service account email.
+
+  --auth adc
+      Uses Application Default Credentials, for example credentials created by:
+        gcloud auth application-default login --no-browser --scopes=https://www.googleapis.com/auth/drive.file
+      This is the best option when service-account key creation is disabled.
 
 The script preserves the source-relative directory structure under a timestamped
 Drive folder, and writes local manifest files for reproducibility.
@@ -26,8 +31,10 @@ import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
+import google.auth
+from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -77,7 +84,6 @@ def parse_drive_folder_id(value: str) -> str:
         m = re.search(pat, value)
         if m:
             return m.group(1)
-    # Already a raw folder ID.
     if re.fullmatch(r"[A-Za-z0-9_-]{10,}", value):
         return value
     raise ValueError(f"Could not parse Google Drive folder ID from: {value}")
@@ -119,10 +125,8 @@ def should_include_file(path: Path, extensions: Sequence[str], name_patterns: Se
     if suffix in extensions:
         if include_all_ext:
             return True
-        # Always keep structured result formats.
         if suffix in {".json", ".jsonl", ".csv", ".tsv"}:
             return True
-        # For text-like files, keep only result/log style names.
         return any(p in name for p in name_patterns)
     return False
 
@@ -160,11 +164,29 @@ def iter_result_files(
                     print(f"[WARN] Could not stat {p}: {e}", file=sys.stderr)
 
 
-def build_drive_service(service_account_json: Path):
+def build_drive_service_service_account(service_account_json: Path):
     if not service_account_json.exists():
         raise FileNotFoundError(f"Service account JSON not found: {service_account_json}")
     creds = service_account.Credentials.from_service_account_file(str(service_account_json), scopes=SCOPES)
     return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def build_drive_service_adc():
+    creds, project_id = google.auth.default(scopes=SCOPES)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    print(f"[INFO] Using Application Default Credentials. project_id={project_id}")
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def build_drive_service(auth_mode: str, service_account_json: str):
+    if auth_mode == "service-account":
+        if not service_account_json:
+            raise ValueError("--service-account is required with --auth service-account")
+        return build_drive_service_service_account(Path(service_account_json).expanduser().resolve())
+    if auth_mode == "adc":
+        return build_drive_service_adc()
+    raise ValueError(f"Unsupported auth mode: {auth_mode}")
 
 
 def create_folder(service, name: str, parent_id: str, dry_run: bool = False) -> str:
@@ -180,7 +202,6 @@ def create_folder(service, name: str, parent_id: str, dry_run: bool = False) -> 
 
 
 def create_folder_tree(service, parent_id: str, rel_dir: Path, cache: Dict[str, str], dry_run: bool = False) -> str:
-    """Create rel_dir under parent_id. cache keys are normalized Drive paths."""
     cur = parent_id
     prefix_parts: List[str] = []
     for part in rel_dir.parts:
@@ -218,7 +239,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Upload JSON/result artifacts from src and src_pca to Google Drive.")
     ap.add_argument("--roots", nargs="+", default=DEFAULT_ROOTS, help="Source roots to scan recursively.")
     ap.add_argument("--drive-folder", default=DEFAULT_DRIVE_FOLDER_URL, help="Destination Google Drive folder URL or folder ID.")
-    ap.add_argument("--service-account", required=True, help="Path to Google service-account key JSON.")
+    ap.add_argument("--auth", choices=["adc", "service-account"], default=os.getenv("DRIVE_AUTH_MODE", "service-account"), help="Google auth mode. Use 'adc' after gcloud auth application-default login.")
+    ap.add_argument("--service-account", default="", help="Path to Google service-account key JSON. Only needed with --auth service-account.")
     ap.add_argument("--run-name", default="", help="Optional top-level folder name in Drive.")
     ap.add_argument("--extensions", nargs="+", default=DEFAULT_EXTENSIONS, help="File extensions to include.")
     ap.add_argument("--include-all-text", action="store_true", help="Include all files matching extensions, not only result-like text names.")
@@ -237,6 +259,7 @@ def main() -> int:
         print(f"  - {r}")
     print(f"[INFO] Destination parent folder id: {parent_id}")
     print(f"[INFO] Drive run folder: {run_name}")
+    print(f"[INFO] Auth mode: {args.auth}")
     print(f"[INFO] Dry run: {args.dry_run}")
 
     candidates = list(iter_result_files(
@@ -260,7 +283,7 @@ def main() -> int:
         print("[WARN] Nothing to upload.")
         return 0
 
-    service = None if args.dry_run else build_drive_service(Path(args.service_account).expanduser().resolve())
+    service = None if args.dry_run else build_drive_service(args.auth, args.service_account)
     run_folder_id = create_folder(service, run_name, parent_id, dry_run=args.dry_run)
     folder_cache: Dict[str, str] = {}
     records: List[UploadRecord] = []
@@ -306,6 +329,7 @@ def main() -> int:
         "drive_parent_folder_id": parent_id,
         "drive_run_folder_name": run_name,
         "drive_run_folder_id": run_folder_id,
+        "auth_mode": args.auth,
         "dry_run": args.dry_run,
         "elapsed_seconds": round(time.time() - start, 3),
         "n_records": len(records),
