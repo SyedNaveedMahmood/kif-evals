@@ -7,7 +7,7 @@ Thin wrapper that:
      Module 8's run_module8_clean() expects.
   3. Runs the evaluation and returns the summary dict.
 
-This file never imports any method code — it only talks to Module 8.
+This file never imports any method code - it only talks to Module 8.
 Add this file once; it works for every method automatically because
 all methods write a uniform UnlearningResult.
 """
@@ -24,12 +24,26 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _force_utf8_stdio() -> None:
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_force_utf8_stdio()
+
+
 def _ensure_module8_importable(kif_root: str):
     """Add KIF's src directory to sys.path so module8 can be imported."""
     src_path = str(Path(kif_root) / "src")
     if src_path not in sys.path:
         sys.path.insert(0, src_path)
-    # Also add kif_root itself (for imports like `from llama20.modules…`)
+    # Also add kif_root itself (for imports like `from llama20.modules...`)
     if kif_root not in sys.path:
         sys.path.insert(0, kif_root)
 
@@ -58,7 +72,7 @@ def run_dual_metric_eval(
     capsules_dir : str
         Path to capsules directory (for signature separation / Cohen's d).
         If you're running LUNAR without KIF capsules this can be an empty
-        directory — signature separation will simply be skipped.
+        directory - signature separation will simply be skipped.
     eval_out_dir : str, optional
         Where to write eval artefacts. Defaults to
         <method_output_dir>/eval_dual_metric/.
@@ -67,7 +81,7 @@ def run_dual_metric_eval(
 
     Returns
     -------
-    dict — the summary dict from run_module8_clean().
+    dict - the summary dict from run_module8_clean().
     """
 
     # ---- Resolve result -------------------------------------------------
@@ -88,12 +102,12 @@ def run_dual_metric_eval(
         model_dir_arg = result.merged_model_dir
         adapter_path_arg = None
         merged_model_dir_arg = result.merged_model_dir
-        logger.info(f"[Eval] Mode A — loading merged model from {result.merged_model_dir}")
+        logger.info(f"[Eval] Mode A - loading merged model from {result.merged_model_dir}")
     elif result.model_dir and result.adapter_path:
         model_dir_arg = result.model_dir
         adapter_path_arg = result.adapter_path
         merged_model_dir_arg = None
-        logger.info(f"[Eval] Mode B — base={result.model_dir}, adapter={result.adapter_path}")
+        logger.info(f"[Eval] Mode B - base={result.model_dir}, adapter={result.adapter_path}")
     else:
         raise ValueError(
             "[Eval] UnlearningResult has neither merged_model_dir nor "
@@ -138,7 +152,7 @@ def run_dual_metric_eval(
 
     # ---- Save annotated summary -----------------------------------------
     out_path = Path(eval_out_dir) / "dual_metric_summary.json"
-    out_path.write_text(json.dumps(summary, indent=2))
+    out_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info(f"[Eval] Dual-metric summary saved to {out_path}")
 
     # ---- Print KIF-style type classification ----------------------------
@@ -173,12 +187,12 @@ def _print_kif_classification(summary: Dict[str, Any], method_name: str):
     util_str = f"{util_drift_ppl:+.2f}" if util_drift_ppl is not None else "N/A"
 
     print("\n" + "=" * 60)
-    print(f"  KIF Dual-Metric Classification — {method_name}")
+    print(f"  KIF Dual-Metric Classification - {method_name}")
     print("=" * 60)
-    print(f"  SMR (surface leakage)  : {smr_pct:.2f}%")
-    print(f"  EL10 (latent trace)    : {el10_post:.4f}" if el10_post is not None else "  EL10: N/A")
-    print(f"  Utility Drift (PPL Δ)  : {util_str}")
-    print(f"  → Mechanism State      : {mech}")
+    print(f"  SMR (surface leakage)     : {smr_pct:.2f}%")
+    print(f"  EL10 (latent trace)       : {el10_post:.4f}" if el10_post is not None else "  EL10: N/A")
+    print(f"  Utility Drift (PPL delta) : {util_str}")
+    print(f"  Mechanism State           : {mech}")
     print("=" * 60 + "\n")
 
 
