@@ -7,25 +7,25 @@ then evaluate with the generalised Module 8 (SMR + EL10 + utility).
 Usage
 -----
 # Full run — unlearn + eval
-python orchestrate.py \\
-    --method        lunar \\
-    --model_dir     outputs/model \\
-    --prompts_jsonl outputs/datasets/prompts.jsonl \\
-    --capsules_dir  outputs/capsules \\
+python orchestrate.py \
+    --method        lunar \
+    --model_dir     outputs/model \
+    --prompts_jsonl outputs/datasets/prompts.jsonl \
+    --capsules_dir  outputs/capsules \
     --output_dir    outputs/unlearning_runs
 
 # Eval-only on a previous run
-python orchestrate.py \\
-    --eval_only   true \\
-    --result_json outputs/unlearning_runs/lunar/unlearning_result.json \\
-    --model_dir   outputs/model \\
-    --prompts_jsonl outputs/datasets/prompts.jsonl \\
+python orchestrate.py \
+    --eval_only   true \
+    --result_json outputs/unlearning_runs/lunar/unlearning_result.json \
+    --model_dir   outputs/model \
+    --prompts_jsonl outputs/datasets/prompts.jsonl \
     --capsules_dir  outputs/capsules
 
 # Override LUNAR config
-python orchestrate.py \\
-    --method lunar \\
-    --config '{"auto_select_layer": false, "layer_modified": 18}' \\
+python orchestrate.py \
+    --method lunar \
+    --config '{"auto_select_layer": false, "layer_modified": 18}' \
     ...
 
 Adding a new method
@@ -154,7 +154,7 @@ def _run_eval_on_result(
 
     summary["method"] = result.method_name
     (Path(eval_out_dir) / "final_summary.json").write_text(
-        json.dumps(summary, indent=2, default=str)
+        json.dumps(summary, indent=2, default=str), encoding="utf-8"
     )
     return summary
 
