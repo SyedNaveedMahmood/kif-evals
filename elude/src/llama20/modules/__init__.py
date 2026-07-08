@@ -4,7 +4,23 @@ Notebook-derived pipeline modules.
 Each module exposes a `run_module*` entrypoint that mirrors the original cell.
 """
 
+import os
+import sys
 from pathlib import Path
+
+
+def _force_utf8_stdio() -> None:
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_force_utf8_stdio()
 
 _ORIGINAL_WRITE_TEXT = Path.write_text
 
