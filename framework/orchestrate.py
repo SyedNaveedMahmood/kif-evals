@@ -6,7 +6,7 @@ then evaluate with the generalised Module 8 (SMR + EL10 + utility).
 
 Usage
 -----
-# Full run — unlearn + eval
+# Full run - unlearn + eval
 python orchestrate.py \
     --method        lunar \
     --model_dir     outputs/model \
@@ -31,7 +31,7 @@ python orchestrate.py \
 Adding a new method
 -------------------
 1. Create methods/my_method.py  (copy methods/template.py)
-2. Implement run() → return UnlearningResult
+2. Implement run() -> return UnlearningResult
 3. Add import to methods/__init__.py
 4. Run: python orchestrate.py --method my_method ...
 """
@@ -41,13 +41,29 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
+def _force_utf8_stdio() -> None:
+    """Avoid Windows cp1252 crashes when eval prints Unicode model outputs."""
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+_force_utf8_stdio()
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s — %(message)s",
+    format="%(asctime)s  %(levelname)-8s  %(name)s - %(message)s",
 )
 logger = logging.getLogger("orchestrate")
 
@@ -72,9 +88,9 @@ def run_pipeline(
     eval_out_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    End-to-end: prompts.jsonl → unlearn → Module 8 eval → summary dict.
+    End-to-end: prompts.jsonl -> unlearn -> Module 8 eval -> summary dict.
     """
-    # ── Unlearn ──────────────────────────────────────────────────────────
+    # -- Unlearn ------------------------------------------------------------
     MethodClass = METHOD_REGISTRY.get(method_name)
     method      = MethodClass(config_overrides=config_overrides)
     result: UnlearningResult = method.execute(
@@ -88,7 +104,7 @@ def run_pipeline(
     if skip_eval:
         return result.to_dict()
 
-    # ── Eval ─────────────────────────────────────────────────────────────
+    # -- Eval ---------------------------------------------------------------
     return _run_eval_on_result(
         result=result,
         model_dir=model_dir,
@@ -154,7 +170,8 @@ def _run_eval_on_result(
 
     summary["method"] = result.method_name
     (Path(eval_out_dir) / "final_summary.json").write_text(
-        json.dumps(summary, indent=2, default=str), encoding="utf-8"
+        json.dumps(summary, indent=2, default=str, ensure_ascii=False),
+        encoding="utf-8",
     )
     return summary
 
@@ -227,7 +244,7 @@ def main():
     print("\n" + "=" * 62)
     print("FINAL SUMMARY")
     print("=" * 62)
-    print(json.dumps(summary, indent=2, default=str))
+    print(json.dumps(summary, indent=2, default=str, ensure_ascii=False))
 
 
 if __name__ == "__main__":
