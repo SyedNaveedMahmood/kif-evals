@@ -1,10 +1,10 @@
 # Successful and Helpful Rebuttal Experiments Summary
 
-This file summarizes only the experiments that are directly useful for the paper/rebuttal narrative. The emphasis is on evidence that answers reviewer concerns: layer choice, alpha_eff behavior, and whether existing baselines cleanly solve the weak 3B setting.
+This file summarizes only the experiments that are directly useful for the paper/rebuttal narrative. The emphasis is on evidence that answers reviewer concerns: layer choice, alpha_eff behavior, small-model baseline context, and hidden-space clustering/recoverability.
 
 ## Executive verdict
 
-The rebuttal package is now materially stronger. The completed experiments support three claims: ERUF's layer choice is data-driven, alpha_eff behaves as a controllable internal attenuation knob, and the 3B regime exposes baseline tradeoffs rather than being solved by existing methods. The new Qwen 3B baseline suite is especially useful because ReGLU looks very strong under direct SMR/EL10 evaluation but still shows high adversarial recovery success in the full saved-suite evaluator, while LUNAR has lower adversarial recovery but already showed severe utility collapse and no EL10 improvement in the direct evaluation.
+The rebuttal package is now materially stronger. The completed experiments support four claims: ERUF's layer choice is data-driven, alpha_eff behaves as a controllable internal attenuation knob, the 3B regime exposes baseline tradeoffs rather than being solved by existing methods, and the hidden-space diagnostics should be framed as representation-level attenuation rather than formal erasure. The new Weakness 5 clustering diagnostic is useful because it directly answers the reviewer concern while avoiding an overclaim: forgotten entities show reduced subject-level separability and recoverability in the upper intervention layers, but we should describe this as attenuation, not complete deletion of the full entity manifold.
 
 ## Completed experiments useful for rebuttal
 
@@ -16,8 +16,9 @@ The rebuttal package is now materially stronger. The completed experiments suppo
 | 4 | Qwen 3B LUNAR direct baseline | Qwen/Qwen2.5-3B-Instruct | Large utility collapse and EL10 ratio above 1 | Shows LUNAR does not cleanly solve Qwen 3B |
 | 5 | Qwen 3B ReGLU direct baseline | Qwen/Qwen2.5-3B-Instruct | Near-total direct suppression but severe utility degradation | Shows ReGLU is strong but destructive |
 | 6 | Qwen 3B saved-suite baseline evaluation | LUNAR and ReGLU full saved-suite evals | ReGLU has low alias hit but high adversarial recovery success; LUNAR has lower recovery but poor direct utility/internal tradeoff | Shows direct SMR/EL10 are insufficient, matching the paper's robust/adversarial diagnostic framing |
-| 7 | OPT-OUT retain-data fix | Llama/Qwen baseline framework | Added Adele retain rows to avoid empty retain-pool failure | Fixes the earlier local OPT-OUT failure cause |
-| 8 | ReGLU CPU RILA backend | Qwen 3B on RTX 5060 Ti | ReGLU completed with original hyperparameters after moving RILA eigensolves off CUDA | Operational reproducibility fix, not a changed method |
+| 7 | Weakness 5 hidden-space clustering/recoverability | Llama-3.1-8B ERUF adapter, layers 23-27 | Subject-name-excluded pooling reduces kNN, silhouette, centroid distance, and linear subject-ID recoverability after ERUF | Directly addresses the reviewer's clustering request while preserving the attenuation, not erasure, framing |
+| 8 | OPT-OUT retain-data fix | Llama/Qwen baseline framework | Added Adele retain rows to avoid empty retain-pool failure | Fixes the earlier local OPT-OUT failure cause |
+| 9 | ReGLU CPU RILA backend | Qwen 3B on RTX 5060 Ti | ReGLU completed with original hyperparameters after moving RILA eigensolves off CUDA | Operational reproducibility fix, not a changed method |
 
 ## 1. Layer-band localization ablation
 
@@ -114,7 +115,34 @@ The saved-suite evaluator completed all rows for both Qwen 3B baselines: fast en
 
 > We additionally evaluated the completed Qwen 3B LUNAR and ReGLU baselines with the same robustness-style probes used in the paper. ReGLU remains strong on direct alias suppression, but its adversarial recovery success is high despite low adversarial alias hit, indicating that direct SMR/EL10 suppression does not imply robust entity erasure. LUNAR has lower adversarial recovery in this suite, but its direct evaluation shows severe utility degradation and no internal EL10 reduction. These complementary failure modes reinforce that Qwen 3B is a stress setting where baselines trade off direct suppression, robust recoverability, and utility preservation.
 
-## 6. Qwen 3B SimNPO feasibility attempt
+## 6. Weakness 5 hidden-space clustering and recoverability
+
+**Reviewer concern:** Hidden-space diagnostics in Table 5 should include clustering evidence. The concern is that if forget entities remain well-clustered, ERUF may still retain their semantics.
+
+**Important framing:** This result should not be used to claim formal deletion of every semantic trace. The correct claim is representation-level attenuation. The hidden-space evidence should be read together with behavioral forgetting, SMR, EL10, adversarial recovery, and name-agnostic recovery metrics.
+
+**Experiment:** Llama-3.1-8B, ERUF LoRA adapter `outputs/global_adapters/unlearning_adapter_repaware_20260709_211224`, upper intervention layers 23-27, 24 neutral prompts per entity, subject-name tokens excluded from pooling so the result is not driven by lexical identity alone.
+
+| Hidden-space diagnostic, layers 23-27 average | Base | ERUF | Interpretation |
+|---|---:|---:|---|
+| kNN subject recoverability | 0.085 | 0.066 | lower subject recoverability |
+| Silhouette | -0.026 | -0.047 | weaker subject clustering |
+| Between-centroid distance | 0.00256 | 0.00228 | compressed subject centroids |
+| Linear subject-ID probe accuracy | 0.831 | 0.412 | lower linear decodability |
+
+At the final intervention layer, layer 27, the same trend is visible: kNN decreases from 0.102 to 0.074, silhouette decreases from -0.023 to -0.048, centroid distance decreases from 0.00329 to 0.00286, and linear probe accuracy decreases from 0.954 to 0.415.
+
+**Rebuttal response text:**
+
+> We thank the reviewer for this important point. We agree that hidden-state movement in Table 5 should not, by itself, be interpreted as proof that a forgotten entity has been completely removed. Our intended claim is representation-level attenuation, not a formal guarantee of irreversible deletion.
+>
+> To address the reviewer’s clustering concern directly, we added a forget-entity clustering and recoverability diagnostic on Llama-3.1-8B at the upper intervention layers 23-27. The analysis uses the forgotten entities, 24 neutral prompts per entity, and excludes subject-name tokens from pooling so that the result is not driven by lexical identity alone. Under this stricter setting, forgotten entities do not remain strongly clustered after ERUF. Averaged over layers 23-27, kNN subject recoverability decreases from 0.085 to 0.066, silhouette decreases from -0.026 to -0.047, mean between-centroid distance decreases from 0.00256 to 0.00228, and linear subject-ID probe accuracy decreases from 0.831 to 0.412.
+>
+> We will revise the Table 5 discussion to make this distinction explicit. The hidden-space evidence should be read as reduced subject-level separability and recoverability, not as proof that every semantic trace of the entity has vanished. This interpretation is also consistent with the rest of the paper: ERUF reduces surface leakage and EL10, reduces adversarial entity recovery from 63.89% to 20.15%, and reduces name-agnostic recovery metrics by 72.7-77.4%. Together, the new clustering diagnostic and the existing behavioral probes support the paper’s central claim: ERUF weakens subject-linked internal activation and non-canonical recovery routes, rather than merely suppressing exact-name outputs.
+>
+> We will update the manuscript accordingly by: (1) adding the clustering/recoverability table to the appendix, (2) revising the main Table 5 discussion to state “attenuation” rather than “erasure,” and (3) clarifying that ERUF does not claim formal irreversible deletion of the full entity manifold.
+
+## 7. Qwen 3B SimNPO feasibility attempt
 
 | Metric | Result |
 |---|---|
@@ -137,11 +165,12 @@ The saved-suite evaluator completed all rows for both Qwen 3B baselines: fast en
 | Baselines missing in weak 3B setting | Llama 3B and Qwen 3B baseline stress tests show leakage/utility tradeoffs across methods |
 | Baselines might solve small-model cases | LUNAR does not cleanly solve Qwen 3B; ReGLU suppresses direct leakage but damages utility and still has high adversarial recovery success |
 | Direct leakage metrics may be insufficient | Qwen saved-suite results show low alias hit can coexist with high adversarial recovery success |
+| Hidden-space clustering missing | Weakness 5 clustering/recoverability diagnostic shows reduced subject-level separability after ERUF under subject-name-excluded pooling |
 | OPT-OUT failed locally | Cause identified: missing retain rows. Fixed by adding Adele retain-control rows locally |
 
 ## Recommended paper framing
 
-> We added targeted rebuttal experiments addressing layer selection, alpha_eff behavior, and missing small-model baseline context. A layer-band sensitivity check supports data-driven high-salience capsule placement, while a controlled alpha_eff sweep shows monotonic target-signature attenuation under the capsule intervention. Additional 3B baseline stress tests show that small models expose tradeoffs across methods: LUNAR-style methods can avoid some robust recovery but may fail internal EL10/utility criteria, whereas ReGLU-style suppression can reduce direct leakage but incur substantial utility degradation and still show high adversarial recovery success. These results support framing the 3B setting as capacity-limited rather than as a setting where existing baselines cleanly solve entity-level representation unlearning.
+> We added targeted rebuttal experiments addressing layer selection, alpha_eff behavior, missing small-model baseline context, and hidden-space clustering. A layer-band sensitivity check supports data-driven high-salience capsule placement, while a controlled alpha_eff sweep shows monotonic target-signature attenuation under the capsule intervention. Additional 3B baseline stress tests show that small models expose tradeoffs across methods: LUNAR-style methods can avoid some robust recovery but may fail internal EL10/utility criteria, whereas ReGLU-style suppression can reduce direct leakage but incur substantial utility degradation and still show high adversarial recovery success. The new clustering diagnostic further supports an attenuation interpretation: forgotten entities become less subject-recoverable in the upper intervention layers, but we do not claim formal irreversible deletion of the full entity manifold.
 
 ## What not to overclaim
 
@@ -151,16 +180,17 @@ The saved-suite evaluator completed all rows for both Qwen 3B baselines: fast en
 - Do not report Qwen 3B SimNPO as a metric result from the 5060 Ti attempt. It is only a local hardware feasibility failure.
 - Do not include OPT-OUT until rerun with the Adele retain-control prompt file.
 - Do not present the alpha_eff ablation as end-to-end unlearning performance. It is a mechanistic intervention sanity check.
+- Do not describe the Weakness 5 clustering result as formal erasure. It is evidence of reduced subject-level separability and recoverability.
 
-## Next experiment priorities
+## Remaining experiment priorities
 
 | Priority | Experiment | Machine | Why |
 |---:|---|---|---|
-| 1 | Finish the ongoing 8B full ERUF run | 24 GB VRAM PC | Highest value because it gives full-model ERUF evidence under the main setting |
-| 2 | Run Qwen 3B SimNPO full-parameter baseline only if larger compute is available | 24 GB PC or cluster | 5060 Ti OOMs under fair full-parameter SimNPO |
+| 1 | Compile final 8B runtime/cost table from logs | 24 GB VRAM PC | Directly answers computational-cost concern |
+| 2 | Run Module 8 only if full ERUF behavioral metrics are still needed | 24 GB VRAM PC | Adapter exists, but Module 8 gives the final standard evaluation table |
 | 3 | Run Llama 3B OPT-OUT with Adele retain-control file | 24 GB PC or cluster preferred | Fixes the previously failed baseline |
-| 4 | Use 5060 Ti for additional evaluation-only checks, not training | RTX 5060 Ti | Training-heavy baselines are not worth fighting on 16 GB |
+| 4 | Run Qwen 3B SimNPO full-parameter baseline only if larger compute is available | 24 GB PC or cluster | 5060 Ti OOMs under fair full-parameter SimNPO |
 
 ## Best use of RTX 5060 Ti next
 
-The 5060 Ti has already produced the most useful Qwen 3B saved-suite evidence for LUNAR and ReGLU. Do not spend it on full-parameter SimNPO or OPT-OUT training. The next useful local use would be lightweight evaluation-only checks on already saved models, or simply leave it idle while the 8B ERUF run finishes on the 24 GB machine.
+The 5060 Ti has already produced the most useful Qwen 3B saved-suite evidence for LUNAR and ReGLU. Do not spend it on full-parameter SimNPO or OPT-OUT training. The next useful local use would be lightweight evaluation-only checks on already saved models, or simply leave it idle while the 24 GB machine handles any remaining 8B work.
