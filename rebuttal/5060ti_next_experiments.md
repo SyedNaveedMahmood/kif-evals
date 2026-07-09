@@ -1,306 +1,182 @@
-# 5060 Ti Rebuttal Experiment Queue
+# RTX 5060 Ti Rebuttal Experiments
 
-This note tracks what should be run on the RTX 5060 Ti while the full Llama-3.1-8B ERUF Module 7 run is deferred to the 24 GB GPU.
+This note tracks lightweight rebuttal experiments that can be run on the local RTX 5060 Ti while the full Llama-3.1-8B ERUF Module 7 run is deferred to a 24 GB GPU.
 
-The goal is not to run every possible ablation. The goal is to run quick experiments that directly answer reviewer concerns and only report them if the result supports the paper's actual narrative. If an experiment does not support the current narrative, treat it as diagnostic evidence and pivot the rebuttal wording instead of forcing the claim.
+The operating rule is strict: include a result in the rebuttal only if it supports the actual paper narrative. If a result conflicts with the current framing, use it diagnostically and soften the claim rather than forcing a positive interpretation.
 
-## Current status from uploaded compute-cost extraction
+## Reviewer concerns targeted
 
-The current compute-cost extraction is **not ready to report as a final compute-cost table**.
+The current review set raises three directly actionable concerns:
 
-What it currently gives us:
-
-- It detects the local ERUF machine as `NVIDIA GeForce RTX 5060 Ti with 15.93 GB memory`.
-- It finds some historical LUNAR wall-clock records in cluster logs, for example 289 s, 159 s, 949 s, and 988 s.
-- It detects intended GPU counts from several SLURM scripts.
-
-Why it should not yet be used as rebuttal evidence:
-
-- Most rows have missing `wall_seconds`.
-- Most rows have missing `gpu_hours`.
-- Several rows infer `gpu_type` as `1` or `4` from SLURM GPU-count syntax, which is not a real GPU model.
-- Many unrelated files are classified as method `eruf`, so method attribution needs manual cleanup or a better parser.
-
-**Reporting rule:** do not cite this table yet. Use it only as a scaffold. For rebuttal, we need a curated table with one row per completed method/run, containing method, model, GPU model, GPU count, wall-clock time, and GPU-hours.
-
-## Review concerns this queue targets
-
-The uploaded reviews make three quick-action concerns especially relevant:
-
-1. **Small/moderate-model baselines:** reviewers ask what happens to LUNAR, ReGLU, OPT-OUT, and SimNPO on the 3B settings where ERUF struggles.
+1. **Small/moderate-model baselines:** reviewers ask what happens to LUNAR, ReGLU, OPT-OUT, and SimNPO on 3B settings where ERUF struggles.
 2. **Compute cost:** reviewers ask whether ERUF costs substantially more than baselines.
-3. **Layer choice:** reviewers say the mid-to-late layer choice is currently supported mainly by empirical evidence, so a compact sensitivity check would help.
+3. **Layer choice:** reviewers state that the mid-to-late layer choice is mainly empirically motivated and should be ablated.
 
-The 3B baseline table is highest value overall, but it is already running elsewhere. On the 5060 Ti, the best quick target is the layer-band ablation plus clean local timing.
+The 3B baseline table remains the highest-value experiment overall, but it is running on another machine. The best completed local 5060 Ti experiment is the layer-band ablation below.
 
-## Experiment A: Layer-band localization ablation
-
-### Purpose
-
-Directly answer the criticism that the mid-to-late layer choice is arbitrary. The paper currently uses a Cohen's d plot to motivate high-salience layers. This experiment turns that into an ablation:
-
-- Early band: layers 5-9
-- Middle band: layers 14-18
-- Peak band: layers 23-27, already completed in the current run
-
-The experiment does **not** require full Module 7 LoRA training. It only needs Module B and Module C, optionally Module D. This is suitable for the RTX 5060 Ti.
-
-### Use only if
-
-Use the result in the rebuttal only if it shows one of these:
-
-- Peak band has clearly stronger mean best score than early/middle; or
-- Peak band has more stable subject coverage and capsule success; or
-- Peak band is at least competitive while early/middle are weaker for multiple subjects.
-
-Do **not** report it as a win if early or middle layers beat the peak band. In that case, change the claim to data-driven layer selection rather than fixed peak-layer superiority.
-
-### Commands: early band 5-9
-
-Run from the ERUF repo:
-
-```bash
-cd "$ERUF"
-conda activate eruf-rebuttal
-
-mkdir -p outputs/rebuttal_layer_ablation
-
-/usr/bin/time -v bash -lc '
-KIF_MODULE_B_LAYERS=5-9 \
-KIF_MODULE_B_BATCH_SIZE=8 \
-KIF_MODULE_B_CAPTURE_SCOPE=full \
-KIF_MODULE_B_OUTPUT_DIR=outputs/rebuttal_layer_ablation/early_05_09/activations \
-llama20 module_b
-' 2>&1 | tee outputs/rebuttal_layer_ablation/early_05_09_module_b_time.log
-```
-
-Then run Module C manually on the same band:
-
-```bash
-python - <<'PY'
-import torch
-from llama20.modules.module_c import SignatureMiningConfig, ROMEHyperParams, SignatureExtractor
-
-layers = [5, 6, 7, 8, 9]
-config = SignatureMiningConfig(
-    activations_dir="outputs/rebuttal_layer_ablation/early_05_09/activations",
-    output_dir="outputs/rebuttal_layer_ablation/early_05_09/signatures",
-    rome_hparams=ROMEHyperParams(
-        layers=layers,
-        layer_selection="top_k",
-        target_module="mlp",
-        significance_threshold=1.5,
-    ),
-    top_k_directions=3,
-    min_prompts_per_subject=2,
-    use_semantic_negatives=True,
-    min_controls_per_subject=1,
-    allow_synthetic_fallback=True,
-    enable_oversampling=False,
-    negative_pool_mode="match_positives",
-    fixed_negative_pool_size=100,
-    synthetic_fraction=0.10,
-    activation_strategy="mean_token",
-    standardize_dims=True,
-    device="cuda" if torch.cuda.is_available() else "cpu",
-    use_half_precision=False,
-    enable_memory_cleanup=True,
-    cleanup_frequency=5,
-)
-extractor = SignatureExtractor(config)
-signatures = extractor.extract_all_signatures()
-extractor.save_signature_index(signatures)
-extractor.create_summary_report()
-PY
-```
-
-### Commands: middle band 14-18
-
-```bash
-cd "$ERUF"
-conda activate eruf-rebuttal
-
-/usr/bin/time -v bash -lc '
-KIF_MODULE_B_LAYERS=14-18 \
-KIF_MODULE_B_BATCH_SIZE=8 \
-KIF_MODULE_B_CAPTURE_SCOPE=full \
-KIF_MODULE_B_OUTPUT_DIR=outputs/rebuttal_layer_ablation/middle_14_18/activations \
-llama20 module_b
-' 2>&1 | tee outputs/rebuttal_layer_ablation/middle_14_18_module_b_time.log
-```
-
-Then Module C:
-
-```bash
-python - <<'PY'
-import torch
-from llama20.modules.module_c import SignatureMiningConfig, ROMEHyperParams, SignatureExtractor
-
-layers = [14, 15, 16, 17, 18]
-config = SignatureMiningConfig(
-    activations_dir="outputs/rebuttal_layer_ablation/middle_14_18/activations",
-    output_dir="outputs/rebuttal_layer_ablation/middle_14_18/signatures",
-    rome_hparams=ROMEHyperParams(
-        layers=layers,
-        layer_selection="top_k",
-        target_module="mlp",
-        significance_threshold=1.5,
-    ),
-    top_k_directions=3,
-    min_prompts_per_subject=2,
-    use_semantic_negatives=True,
-    min_controls_per_subject=1,
-    allow_synthetic_fallback=True,
-    enable_oversampling=False,
-    negative_pool_mode="match_positives",
-    fixed_negative_pool_size=100,
-    synthetic_fraction=0.10,
-    activation_strategy="mean_token",
-    standardize_dims=True,
-    device="cuda" if torch.cuda.is_available() else "cpu",
-    use_half_precision=False,
-    enable_memory_cleanup=True,
-    cleanup_frequency=5,
-)
-extractor = SignatureExtractor(config)
-signatures = extractor.extract_all_signatures()
-extractor.save_signature_index(signatures)
-extractor.create_summary_report()
-PY
-```
-
-### Summarize early/middle/peak
-
-For peak, use the existing run if it is still in `outputs/signatures`. If not, copy or rerun the peak band under `outputs/rebuttal_layer_ablation/peak_23_27`.
-
-```bash
-python - <<'PY'
-import json
-from pathlib import Path
-import statistics as stats
-
-roots = {
-    "early_05_09": Path("outputs/rebuttal_layer_ablation/early_05_09/signatures/signature_index.json"),
-    "middle_14_18": Path("outputs/rebuttal_layer_ablation/middle_14_18/signatures/signature_index.json"),
-    "peak_23_27_current": Path("outputs/signatures/signature_index.json"),
-}
-
-rows = []
-for name, path in roots.items():
-    if not path.exists():
-        print(f"MISSING: {name}: {path}")
-        continue
-    obj = json.loads(path.read_text())
-    scores = []
-    successes = 0
-    best_layers = []
-    for subj, rec in obj.get("subjects", {}).items():
-        if rec.get("status") == "success":
-            successes += 1
-        if rec.get("best_score") is not None:
-            scores.append(float(rec["best_score"]))
-        if rec.get("best_layer") is not None:
-            best_layers.append(int(rec["best_layer"]))
-    rows.append((name, successes, len(obj.get("subjects", {})), stats.mean(scores) if scores else None, min(scores) if scores else None, max(scores) if scores else None, best_layers))
-
-print("band,successes,total,mean_best_score,min_best_score,max_best_score,best_layers")
-for r in rows:
-    print(r)
-PY
-```
-
-### Rebuttal comment if good
-
-If peak 23-27 is clearly best or most stable:
-
-> We added a layer-band sensitivity check to address whether capsule placement is arbitrary. Early layers (5-9), middle layers (14-18), and the high-salience band (23-27) were compared using the same activation-mining and signature-extraction pipeline. The high-salience band produced the strongest and most reliable subject-specific separation, with successful capsule construction across the target subjects. This supports using the Cohen's-d localization diagnostic for capsule placement rather than selecting layers ad hoc.
-
-### Alternative comment if not good
-
-If early or middle layers are comparable or better:
-
-> The additional layer-band check shows that useful subject signatures can appear across multiple bands, although the selected band remains a strong candidate. We therefore soften the wording: ERUF does not require a universally fixed layer band; instead, it uses a data-driven localization diagnostic to select high-salience layers per model and subject.
-
-## Experiment B: clean local compute-cost timing
+## Completed Experiment A: Layer-band localization ablation
 
 ### Purpose
 
-The uploaded compute table is currently incomplete. The quickest useful compute-cost evidence is clean timing for the local ERUF stages that already run on a 16 GB GPU:
+This experiment tests whether ERUF's capsule-placement band is arbitrary. It compares early, middle, and high-salience layer bands using the same Module B activation collection and Module C signature mining pipeline.
 
-- Module B activation collection for 5-layer band
-- Module C signature mining
-- Module D capsule forging
+Compared bands:
 
-This does not fully answer total ERUF cost because Module 7 remains the expensive stage, but it gives a defensible partial cost table while the 4090/24 GB run is pending.
+- Early: layers 5-9
+- Middle: layers 14-18
+- Peak/high-salience: layers 23-27
 
-### Command wrapper
+This experiment does not require Module 7 LoRA distillation. It is therefore appropriate for the RTX 5060 Ti.
 
-Use `/usr/bin/time -v` around every stage and save logs under `outputs/rebuttal_timing/`:
+### Result verdict
 
-```bash
-cd "$ERUF"
-mkdir -p outputs/rebuttal_timing
+**Decision: supports_current_narrative**
 
-/usr/bin/time -v llama20 module_d 2>&1 | tee outputs/rebuttal_timing/module_d_peak_23_27_time.log
-```
+The peak 23-27 band is the strongest band by mean best signature score while preserving full subject coverage. All three bands produced signatures for 11/11 subjects, but the peak band has the highest mean score and a strong minimum score. This supports the paper's Cohen's-d localization narrative and can be reported as a layer-band sensitivity check.
 
-For Module 7 on the 5060 Ti, do not continue unless the run is already near completion. One epoch taking 6+ hours means it is a poor use of this GPU. Move the full 8B run to the 24 GB GPU.
+### Summary table
 
-### Rebuttal comment if good
+| Band | Layers | Subjects | Mean best score | Median | Min | Max | Module B sec | Module C sec | Activation GB |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| early_05_09 | 5,6,7,8,9 | 11/11 | 2.5441 | 2.5979 | 1.5605 | 4.7508 | 957.6 | 221.8 | 5.793 |
+| middle_14_18 | 14,15,16,17,18 | 11/11 | 3.0418 | 3.0327 | 2.4994 | 4.4469 | 951.9 | 221.2 | 5.794 |
+| peak_23_27 | 23,24,25,26,27 | 11/11 | 3.1483 | 3.1102 | 2.5151 | 4.3928 | 956.5 | 222.2 | 5.801 |
 
-> We added wall-clock accounting for ERUF's activation-mining and capsule-construction stages. These stages are feasible on a single 16 GB consumer GPU for the evaluated entity set; the main additional cost relative to optimization-only baselines comes from activation collection and the final LoRA distillation stage. We now report this cost explicitly rather than treating ERUF as cost-free.
+### Interpretation
 
-### Alternative comment if costly
+The result supports the existing narrative, but the wording should remain careful. The ablation does **not** prove that layers 23-27 are universally optimal for all models. It shows that, on the evaluated Llama-3.1-8B entity-unlearning setup, the high-salience band selected from the layerwise Cohen's-d diagnostic is stronger than early layers and slightly stronger than middle layers under the same mining protocol.
 
-> ERUF has a higher up-front mechanistic analysis cost than simpler loss-only baselines. We clarify this tradeoff: ERUF is intended for settings where stronger internal attenuation and recovery resistance are worth additional offline analysis, not as the cheapest possible unlearning update.
+The most important comparison is not only peak vs. middle, because middle is close. The strongest defensible claim is:
 
-## Experiment C: small gate/alpha capsule-only sensitivity
+> ERUF uses a data-driven localization diagnostic rather than an arbitrary fixed layer choice. In a layer-band ablation on Llama-3.1-8B, early layers 5-9, middle layers 14-18, and the high-salience band 23-27 all produced subject signatures, but the high-salience band achieved the highest mean best-score while retaining 11/11 subject coverage. This supports selecting capsule placement from mid-to-late high-separability layers instead of choosing layers ad hoc.
 
-### Purpose
+### Rebuttal-ready comment
 
-This should be run only after the layer-band results. It answers whether the capsule behavior is brittle to alpha/gate settings without requiring full Module 7.
+> We added a layer-band sensitivity check to address whether capsule placement is arbitrary. Early layers 5-9, middle layers 14-18, and the high-salience band 23-27 were compared using the same activation-mining and signature-extraction pipeline. All bands produced signatures for all 11 target subjects, but the high-salience band achieved the highest mean best-score (3.1483 vs. 3.0418 for middle and 2.5441 for early). This supports our use of the Cohen's-d localization diagnostic for capsule placement. We now frame layer selection as data-driven high-salience localization rather than a universally fixed layer heuristic.
 
-### Minimal grid
+### Compact paper table candidate
 
-Use a very small grid:
+| Layer band | Layers | Subject coverage | Mean best score |
+|---|---:|---:|---:|
+| Early | 5-9 | 11/11 | 2.5441 |
+| Middle | 14-18 | 11/11 | 3.0418 |
+| High-salience | 23-27 | 11/11 | 3.1483 |
+
+Suggested caption:
+
+> Layer-band sensitivity on Llama-3.1-8B. We compare early, middle, and high-salience bands using the same activation-mining and signature-extraction pipeline. The high-salience band identified by the localization diagnostic gives the strongest mean best-score while preserving complete subject coverage.
+
+## Per-subject details
+
+### early_05_09
+
+| Subject | Status | Best layer | Best score |
+|---|---|---:|---:|
+| Ariana Grande | success | 5 | 2.5979 |
+| Arijit Singh | success | 7 | 4.7508 |
+| Beyoncé | success | 5 | 2.9435 |
+| Drake (musician) | success | 8 | 2.8858 |
+| Ed Sheeran | success | 8 | 1.8650 |
+| Eminem | success | 5 | 1.6882 |
+| Kanye West | success | 9 | 1.5605 |
+| Katy Perry | success | 5 | 2.6110 |
+| Michael Jackson | success | 8 | 1.7262 |
+| Queen (band) | success | 8 | 3.4828 |
+| Taylor Swift | success | 5 | 1.8732 |
+
+### middle_14_18
+
+| Subject | Status | Best layer | Best score |
+|---|---|---:|---:|
+| Ariana Grande | success | 18 | 3.0327 |
+| Arijit Singh | success | 18 | 4.4469 |
+| Beyoncé | success | 17 | 3.2799 |
+| Drake (musician) | success | 18 | 3.1977 |
+| Ed Sheeran | success | 18 | 2.4994 |
+| Eminem | success | 18 | 2.5774 |
+| Kanye West | success | 17 | 2.6061 |
+| Katy Perry | success | 17 | 3.2169 |
+| Michael Jackson | success | 17 | 2.6479 |
+| Queen (band) | success | 18 | 3.3975 |
+| Taylor Swift | success | 17 | 2.5578 |
+
+### peak_23_27
+
+| Subject | Status | Best layer | Best score |
+|---|---|---:|---:|
+| Ariana Grande | success | 26 | 3.2628 |
+| Arijit Singh | success | 25 | 4.3928 |
+| Beyoncé | success | 25 | 3.2342 |
+| Drake (musician) | success | 23 | 3.1102 |
+| Ed Sheeran | success | 23 | 2.5151 |
+| Eminem | success | 26 | 3.0325 |
+| Kanye West | success | 24 | 2.8887 |
+| Katy Perry | success | 26 | 3.2248 |
+| Michael Jackson | success | 24 | 2.7307 |
+| Queen (band) | success | 24 | 3.3501 |
+| Taylor Swift | success | 24 | 2.8893 |
+
+## Compute-cost notes from this run
+
+This result also gives clean timing for the local 5060 Ti stage-level cost:
+
+| Stage | Early sec | Middle sec | Peak sec | Comment |
+|---|---:|---:|---:|---|
+| Module B activation collection | 957.6 | 951.9 | 956.5 | About 15.9 minutes per 5-layer band |
+| Module C signature mining | 221.8 | 221.2 | 222.2 | About 3.7 minutes per 5-layer band |
+
+The local extraction shows that Module B/C layer-band analysis is feasible on a single 16 GB consumer GPU. This does **not** yet settle the full ERUF compute-cost question because Module 7 LoRA distillation is the expensive stage and should be timed separately on the 24 GB GPU.
+
+## Current compute-cost extraction caveat
+
+The earlier uploaded compute-cost extraction is not ready to report as a final table. It detects the RTX 5060 Ti and some historical LUNAR cluster runtimes, but most rows have missing `wall_seconds` and `gpu_hours`, several GPU types are parsed as `1` or `4`, and many unrelated files are classified as method `eruf`.
+
+Reporting rule: use the clean layer-band timings above as partial local evidence. Do not report the auto-extracted global compute-cost table until it is manually cleaned or the parser is improved.
+
+## Next 5060 Ti experiment options
+
+### Option B: capsule-only alpha/gate sensitivity
+
+Run this only if time remains. Do not run full LoRA distillation for every setting.
+
+Minimal grid:
 
 - `default_strength`: -0.5, -0.8, -1.0
 - `z_tau`: 2.5, 3.0, 3.5
 
-Do not run full LoRA distillation for all combinations. Only run capsule/sentinel harvest or a small capsule-only evaluation. Report only if the default region is stable.
+Use only if the result shows the default setting is not a fragile single point. If unstable, do not include a table; instead state that gate calibration remains a limitation.
 
-### Use only if
+### Option C: clean Module D timing
 
-Use this result only if it shows that the default setting is not a single fragile point. Good outcome:
+If capsule forging needs a cleaner cost row, run:
 
-- target prompts fire capsules consistently;
-- benign prompts do not overfire;
-- stronger suppression does not obviously damage general responses.
+```bash
+cd "$ERUF"
+mkdir -p outputs/rebuttal_timing
+/usr/bin/time -v llama20 module_d 2>&1 | tee outputs/rebuttal_timing/module_d_peak_23_27_time.log
+```
 
-If the result is unstable, do not include a table. Instead write that gate calibration is an implementation limitation and avoid claiming hyperparameter robustness.
+### Option D: wait for 3B baselines
 
-## Experiment D: wait for 3B baselines
-
-The most important review-answering table remains the 3B baseline table. Once the separate PC finishes SimNPO/ReGLU/LUNAR/OPT-OUT on 3B, immediately evaluate:
+The most important remaining review-answering table is the 3B baseline table. Once the separate PC finishes SimNPO/ReGLU/LUNAR/OPT-OUT on 3B, evaluate:
 
 - Utility drift
 - SMR
 - EL10
-- mechanism state
+- Mechanism state
 
-### Rebuttal comment if good
+If the result is good:
 
 > We added small-model baseline comparisons on the same 3B setting where ERUF is least favorable. The results show that the failure mode is not unique to ERUF: baselines either retain high surface leakage, amplify internal target activation, or incur larger utility degradation. This supports our revised claim that small models expose a capacity-limited regime rather than a setting where existing baselines solve entity-level representation unlearning.
 
-### Alternative comment if a baseline wins
+If a baseline wins:
 
 > The additional 3B baseline results show that ERUF is not uniformly superior in the smallest-model regime. We therefore revise the claim: ERUF is strongest in standard 7-8B+ settings and exposes small-model capacity limits, while some baseline objectives may be preferable under strict low-capacity constraints.
 
-## Final recommendation for the RTX 5060 Ti
+## Final recommendation
 
-Run in this order:
-
-1. Layer-band ablation: early 5-9 and middle 14-18. Peak 23-27 already exists.
-2. Clean timing logs for Module B/C/D.
-3. Optional small capsule-only gate/alpha sensitivity.
-4. Do not spend the 5060 Ti on full 8B Module 7 if one epoch is taking 6+ hours. Move that to the 24 GB GPU.
+1. Report the layer-band ablation in the rebuttal or appendix.
+2. Do not overclaim universal layer optimality.
+3. Move full 8B Module 7 to the 24 GB GPU.
+4. Use the 5060 Ti for capsule-only sensitivity or clean timing, not full 8B distillation.
+5. Prioritize 3B baseline evaluation once the separate baseline runs finish.
