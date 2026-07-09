@@ -5,13 +5,9 @@ This is a local/WSL-friendly launcher. It keeps the method hyperparameters align
 with the existing main Slurm scripts, but points the base model to Qwen 3B and
 uses the Adele-retain augmented prompt file required by retain-aware baselines.
 
-Run one method at a time, for example:
-
-  python -u framework/scripts/run_qwen3b_baseline_local.py \
-    --method lunar \
-    --model_dir Qwen/Qwen2.5-3B-Instruct \
-    --prompts_jsonl framework/outputs/qwen3b/prompts_with_adele_retain.jsonl \
-    --output_root framework/outputs/qwen3b_baselines
+For ReGLU, the launcher optionally patches only the RILA eigensolver backend:
+the paper-style hyperparameters remain unchanged, but the large eigensolves are
+moved off CUDA so a 16 GB consumer GPU does not OOM during RILA initialization.
 """
 from __future__ import annotations
 
@@ -19,8 +15,11 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
+
+import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
@@ -49,6 +48,10 @@ SUBJECTS = [
     "Queen (band)",
     "Taylor Swift",
 ]
+
+
+def log(msg: str) -> None:
+    print(f"[QWEN3B-LOCAL] {msg}", flush=True)
 
 
 def install_qwen_templates(model_family: str) -> None:
@@ -169,6 +172,125 @@ def method_config(method: str, model_family: str) -> Dict[str, Any]:
     raise ValueError(f"Unsupported method={method!r}")
 
 
+def _top_eigenvectors_cpu(mat: torch.Tensor, k: int, label: str, full_eigh_dim: int = 4096) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Return top-k eigenpairs of a symmetric matrix on CPU.
+
+    This preserves ReGLU's hyperparameters but avoids CUDA OOM during RILA for
+    very wide Qwen MLP matrices. For small matrices we use full eigh. For large
+    matrices we use LOBPCG to avoid materializing the full eigenvector matrix.
+    """
+    mat = mat.detach().float().cpu().contiguous()
+    n = int(mat.shape[0])
+    k = min(int(k), max(1, n - 1))
+    t0 = time.time()
+    log(f"ReGLU CPU eigensolve {label}: n={n}, k={k}")
+    if n <= full_eigh_dim:
+        vals, vecs = torch.linalg.eigh(mat)
+        vals, vecs = vals[-k:].contiguous(), vecs[:, -k:].contiguous()
+    else:
+        try:
+            x0 = torch.randn(n, k, dtype=mat.dtype)
+            vals, vecs = torch.lobpcg(mat, k=k, X=x0, largest=True, method="ortho", niter=80, tol=1e-4)
+            order = torch.argsort(vals)
+            vals, vecs = vals[order].contiguous(), vecs[:, order].contiguous()
+        except Exception as exc:
+            log(f"LOBPCG failed for {label}: {exc}; falling back to full CPU eigh. This may be slow.")
+            vals, vecs = torch.linalg.eigh(mat)
+            vals, vecs = vals[-k:].contiguous(), vecs[:, -k:].contiguous()
+    log(f"ReGLU CPU eigensolve done {label}: {time.time() - t0:.1f}s")
+    return vals, vecs
+
+
+def install_reglu_cpu_rila_patch() -> None:
+    """Patch only the ReGLU RILA eigensolver backend for local 16 GB GPUs."""
+
+    def _apply_rila_initialization_cpu(
+        model,
+        tokenizer,
+        forget_rows: List[Dict[str, str]],
+        retain_rows: List[Dict[str, str]],
+        cfg,
+        target_modules: Dict[str, torch.nn.Module],
+        device: torch.device,
+        output_dir: Path,
+    ) -> Dict[str, torch.Tensor]:
+        n = int(cfg.rila_samples_per_split)
+        forget_sample = reglu._repeat_to_len(forget_rows, n)
+        retain_sample = reglu._repeat_to_len(retain_rows, n)
+        h_forget = reglu._collect_representations_for_modules(
+            model, tokenizer, forget_sample, cfg.model_family, cfg.max_length, cfg.batch_size, target_modules, device, "forget/RILA"
+        )
+        h_retain = reglu._collect_representations_for_modules(
+            model, tokenizer, retain_sample, cfg.model_family, cfg.max_length, cfg.batch_size, target_modules, device, "retain/RILA"
+        )
+
+        rol_bases: Dict[str, torch.Tensor] = {}
+        cache_layers: Dict[str, Dict[str, torch.Tensor]] = {}
+        rank = int(cfg.lora_r)
+        beta = float(cfg.rila_beta)
+        eps = float(cfg.rila_cov_shrink)
+
+        for mi, (name, module) in enumerate(target_modules.items(), 1):
+            if name not in h_forget or name not in h_retain:
+                log(f"ReGLU RILA missing activations for {name}; skipping")
+                continue
+            t_mod = time.time()
+            log(f"ReGLU RILA module {mi}/{len(target_modules)}: {name}")
+            hf = h_forget[name].float().cpu()
+            hr = h_retain[name].float().cpu()
+            nf, d = hf.shape
+            nr, _ = hr.shape
+
+            cf = (hf.T @ hf) / max(1, nf)
+            cr = (hr.T @ hr) / max(1, nr)
+            eye = torch.eye(d, dtype=torch.float32)
+            cf = cf + eps * eye
+            cr = cr + eps * eye
+            delta = (1.0 - beta) * cf - beta * cr
+
+            top_evals, q_delta = _top_eigenvectors_cpu(delta, rank, f"delta::{name}")
+            k_basis = min(int(cfg.rol_rank), d)
+            _, q_retain = _top_eigenvectors_cpu(cr, k_basis, f"retain::{name}")
+
+            w0 = module.base_layer.weight.detach().float().cpu()
+            if q_delta.shape[0] != w0.shape[0]:
+                log(f"ReGLU RILA shape mismatch for {name}: Q={tuple(q_delta.shape)} W={tuple(w0.shape)}; skipping")
+                continue
+
+            a_init = q_delta.T @ w0
+            b_init = q_delta
+            scaling = float(getattr(module, "scaling", {}).get("default", float(cfg.lora_alpha) / float(cfg.lora_r)))
+            w_res = w0 - scaling * (b_init @ a_init)
+            dtype = module.base_layer.weight.dtype
+            mod_device = module.base_layer.weight.device
+            with torch.no_grad():
+                module.base_layer.weight.copy_(w_res.to(dtype=dtype, device=mod_device))
+                module.lora_A["default"].weight.copy_(a_init.to(dtype=dtype, device=mod_device))
+                module.lora_B["default"].weight.copy_(b_init.to(dtype=dtype, device=mod_device))
+
+            rol_bases[name] = q_retain.float().cpu()
+            cache_layers[name] = {
+                "A": a_init.float().cpu(),
+                "B": b_init.float().cpu(),
+                "Qr_retain": q_retain.float().cpu(),
+                "top_eigenvalues": top_evals.float().cpu(),
+                "eigensolver_backend": "cpu_lobpcg_or_eigh",
+            }
+            log(f"ReGLU RILA initialized {name}: B={tuple(b_init.shape)} A={tuple(a_init.shape)} in {time.time() - t_mod:.1f}s")
+
+            del hf, hr, cf, cr, eye, delta, q_delta, q_retain, w0, a_init, b_init, w_res
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        cache_path = output_dir / "reglu_rila_cache.pt"
+        torch.save({"config": reglu.asdict(cfg), "layers": cache_layers, "rila_backend": "cpu_lobpcg_or_eigh"}, cache_path)
+        log(f"ReGLU RILA cache saved -> {cache_path}")
+        return rol_bases
+
+    reglu._apply_rila_initialization = _apply_rila_initialization_cpu
+    log("Installed ReGLU CPU/LOBPCG RILA patch for local Qwen-3B run")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", required=True, choices=["lunar", "reglu", "simnpo", "optout"])
@@ -179,9 +301,13 @@ def main() -> int:
     ap.add_argument("--output_root", default="framework/outputs/qwen3b_baselines")
     ap.add_argument("--skip_eval", action="store_true")
     ap.add_argument("--print_config", action="store_true")
+    ap.add_argument("--reglu_cpu_rila", action="store_true", help="Offload ReGLU RILA eigensolves to CPU/LOBPCG to avoid CUDA OOM on 16 GB GPUs.")
     args = ap.parse_args()
 
     install_qwen_templates(args.model_family)
+    if args.method == "reglu" and args.reglu_cpu_rila:
+        install_reglu_cpu_rila_patch()
+
     cfg = method_config(args.method, args.model_family)
     if args.print_config:
         print(json.dumps(cfg, indent=2), flush=True)
@@ -199,6 +325,7 @@ def main() -> int:
     print(f"prompts_jsonl={args.prompts_jsonl}", flush=True)
     print(f"output_dir={out_dir}", flush=True)
     print(f"skip_eval={args.skip_eval}", flush=True)
+    print(f"reglu_cpu_rila={args.reglu_cpu_rila}", flush=True)
     print("=" * 80, flush=True)
 
     summary = run_pipeline(
