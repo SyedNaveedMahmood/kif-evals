@@ -8,7 +8,7 @@ The rebuttal package is now materially stronger. The completed experiments suppo
 
 The completed Llama 3B OPT-OUT run should be used carefully. It is useful rebuttal evidence, but not a simple win for ERUF. OPT-OUT preserves benign utility and lowers EL10 below 1, but it still has high direct surface leakage, high adversarial recovery, and high RWKU forget alias recovery. This strengthens the rebuttal narrative that the weak 3B setting is a tradeoff regime and that no single baseline cleanly solves surface suppression, internal attenuation, robust recovery, and utility preservation simultaneously.
 
-The completed Qwen 3B SimNPO run is especially strong evidence for Weakness 2. It nearly eliminates EL10 while preserving benign utility reasonably well, yet fails badly on behavioral and robust forgetting: direct SMR is 77.78%, adversarial recovery success is 90.13%, and RWKU forget alias hit is 77.67%. This is not evidence that ERUF wins every individual metric—SimNPO is substantially stronger on EL10—but it supports ERUF's claimed joint advantage: low internal trace alone does not yield reliable surface suppression or robust non-recoverability. For Qwen 3B OPT-OUT, the standard-Adam full-parameter attempt OOMed, but a full-parameter PagedAdamW8bit rerun completed training; it should remain a training-feasibility result until SMR/EL10 and saved-suite evaluation are complete.
+The completed Qwen 3B SimNPO and OPT-OUT evaluations are especially useful for Weakness 2. SimNPO nearly eliminates EL10 while preserving benign utility reasonably well, yet fails badly on behavioral and robust forgetting: direct SMR is 77.78%, adversarial recovery success is 90.13%, and RWKU forget alias hit is 77.67%. OPT-OUT, even after the memory-feasible full-parameter PagedAdamW8bit rerun, also does not solve the Qwen 3B setting: direct SMR is 77.78%, EL10 ratio is 1.0255, adversarial recovery success is 83.33%, and RWKU forget alias hit is 64.04%. These results do not show that ERUF wins every individual scalar metric—SimNPO is substantially stronger on EL10—but they strongly support ERUF's joint advantage claim: low internal trace alone, or a utility-preserving full-parameter baseline, does not yield reliable surface suppression or robust non-recoverability.
 
 ## Completed experiments useful for rebuttal
 
@@ -21,8 +21,8 @@ The completed Qwen 3B SimNPO run is especially strong evidence for Weakness 2. I
 | 5 | Qwen 3B LUNAR direct baseline | Qwen/Qwen2.5-3B | Large utility collapse and EL10 ratio above 1 | Shows LUNAR does not cleanly solve Qwen 3B |
 | 6 | Qwen 3B ReGLU direct baseline | Qwen/Qwen2.5-3B | Near-total direct suppression but severe utility degradation | Shows ReGLU is strong but destructive |
 | 7 | Qwen 3B LUNAR/ReGLU saved-suite evaluation | Qwen/Qwen2.5-3B | ReGLU has low alias hit but high adversarial recovery success; LUNAR has lower recovery but poor direct utility/internal tradeoff | Shows direct SMR/EL10 are insufficient |
-| 8 | Qwen 3B SimNPO completed run | Qwen/Qwen2.5-3B base, 9 subjects | EL10 collapses, but SMR=77.78%, adversarial recovery=90.13%, and RWKU forget alias hit=77.67% | Strongly answers Weakness 2: a strong baseline fails far beyond ERUF on surface and robust recovery despite low EL10 |
-| 9 | Qwen 3B OPT-OUT training run | Qwen/Qwen2.5-3B base, full-parameter | Standard Adam OOMed, but PagedAdamW8bit completed training in about 21 minutes | Training-feasibility note only until evaluation completes |
+| 8 | Qwen 3B SimNPO completed run | Qwen/Qwen2.5-3B, 9 subjects | EL10 collapses, but SMR=77.78%, adversarial recovery=90.13%, and RWKU forget alias hit=77.67% | Strongly answers Weakness 2: a strong baseline fails far beyond ERUF on surface and robust recovery despite low EL10 |
+| 9 | Qwen 3B OPT-OUT completed run | Qwen/Qwen2.5-3B, full-parameter PagedAdamW8bit, 9 subjects | SMR=77.78%, EL10 ratio=1.0255, adversarial recovery=83.33%, and RWKU forget alias hit=64.04% | Adds OPT-OUT coverage and reinforces that Qwen 3B remains unsolved by baselines |
 | 10 | Weakness 5 hidden-space clustering/recoverability | Llama-3.1-8B ERUF adapter, layers 23-27 | Subject-name-excluded pooling reduces kNN, silhouette, centroid distance, and linear subject-ID recoverability after ERUF | Directly addresses the reviewer's clustering request while preserving the attenuation, not erasure, framing |
 | 11 | OPT-OUT retain-data fix | Llama/Qwen baseline framework | Added Adele retain rows to avoid empty retain-pool failure | Fixes the earlier local OPT-OUT failure cause |
 | 12 | ReGLU CPU RILA backend | Qwen 3B on RTX 5060 Ti | ReGLU completed with original hyperparameters after moving RILA eigensolves off CUDA | Operational reproducibility fix, not a changed method |
@@ -191,66 +191,58 @@ At the final intervention layer, layer 27, the same trend is visible: kNN decrea
 >
 > We will update the manuscript accordingly by: (1) adding the clustering/recoverability table to the appendix, (2) revising the main Table 5 discussion to state "attenuation" rather than "erasure," and (3) clarifying that ERUF does not claim formal irreversible deletion of the full entity manifold.
 
-## 8. Qwen 3B SimNPO completed result and OPT-OUT training status
+## 8. Qwen 3B SimNPO and OPT-OUT completed results
 
-### Qwen 3B SimNPO
+Both full-parameter Qwen 3B baselines were evaluated on `Qwen/Qwen2.5-3B` with 9 available forgotten subjects. SimNPO used PagedAdamW32bit. OPT-OUT's standard-Adam full-parameter attempt OOMed at the first optimizer step on the 24 GB GPU, but the memory-feasible full-parameter rerun completed with PagedAdamW8bit and was evaluated with the same direct and saved-suite probes.
 
-The fair full-parameter SimNPO-GradDiff run completed on `Qwen/Qwen2.5-3B` with the original-style configuration: 10 epochs, full-parameter training, retain loss enabled with Adele retain rows, paged AdamW 32-bit, gradient checkpointing, and 9 available forgotten subjects.
+### Direct SMR/EL10 diagnostics
 
-| Direct diagnostic | SimNPO result | Interpretation |
-|---|---:|---|
-| Benign pre loss | 4.0765 | Reference utility |
-| Benign post loss | 4.1376 | Small loss increase |
-| Benign loss delta | 0.0611 | Utility largely retained |
-| Benign PPL delta | +3.7161 | Moderate absolute PPL increase |
-| Direct SMR | 0.7778 (77.78%) | Severe surface leakage |
-| Direct keyword hit rate | 0.0723 | Residual target content |
-| EL10 ratio | 0.000556 | Extremely strong early target-mass suppression |
-| Pre/post similarity | 0.4448 | Substantial output change |
-| Mechanism state | Type III | Surface leakage dominates despite low EL10 |
+| Direct diagnostic | SimNPO | OPT-OUT | Interpretation |
+|---|---:|---:|---|
+| Benign pre loss | 4.0765 | 4.0765 | Same reference model/eval setup |
+| Benign post loss | 4.1376 | 4.2955 | OPT-OUT changes utility more |
+| Benign loss delta | 0.0611 | 0.2190 | SimNPO preserves utility better |
+| Benign PPL delta | +3.7161 | +14.4334 | OPT-OUT has larger utility drift |
+| Direct SMR | 0.7778 (77.78%) | 0.7778 (77.78%) | Both leak heavily on direct surface prompts |
+| Direct keyword hit rate | 0.0723 | 0.0729 | Residual keyword-level target signal remains |
+| EL10 ratio | 0.000556 | 1.0255 | SimNPO collapses EL10; OPT-OUT does not improve it |
+| Pre/post similarity | 0.4448 | 0.3742 | Both substantially alter outputs |
+| Mechanism state | Type III | Type III | Surface leakage remains high |
 
-All saved suites completed: fast entity bundle 1157/1157, adversarial recovery 1206/1206, and RWKU-style robustness 747/747.
+### Saved-suite completion
 
-| Robustness diagnostic | SimNPO result |
-|---|---:|
-| Name-agnostic target alias hit | 0.3747 |
-| Name-agnostic target keyword hit rate | 0.2631 |
-| Name-agnostic target mass | 0.0477 |
-| BLUR/mixed forget target alias hit | 0.0361 |
-| Matched-control retain alias hit | 0.8000 |
-| Neighbor-locality retain alias hit | 0.7944 |
-| Generic benign refusal-like | 0.0000 |
-| Adversarial target alias hit | 0.4444 |
-| Adversarial target keyword hit rate | 0.2705 |
-| Adversarial target mass | 0.0709 |
-| Adversarial recovery success | 0.9013 |
-| RWKU forget alias hit | 0.7767 |
-| RWKU forget keyword hit rate | 0.3458 |
-| RWKU forget target mass | 0.1419 |
+| Suite | SimNPO | OPT-OUT |
+|---|---:|---:|
+| Fast entity bundle | 1157/1157 | 1157/1157 |
+| Adversarial recovery | 1206/1206 | 1206/1206 |
+| RWKU-style robustness | 747/747 | 747/747 |
 
-**Judgment for Weakness 2:** This is one of the strongest useful results in the rebuttal package. SimNPO does not merely show a mild tradeoff: it nearly eliminates the direct EL10 signal but still leaks the target name on 77.78% of direct evaluations and is recoverable on 90.13% of adversarial evaluations. The high matched-control and neighbor-locality retention, together with zero generic-benign refusal, show that the failure is not simply broad model collapse. Compared with ERUF's reported Qwen 3B surface leakage of 0.43%, SimNPO fails far more severely on surface control, while outperforming ERUF on EL10. Therefore the defensible claim is **joint superiority across surface suppression, robust recoverability, internal diagnostics, and utility**, not superiority on every scalar metric.
+### Robustness diagnostics
+
+| Robustness diagnostic | SimNPO | OPT-OUT |
+|---|---:|---:|
+| Name-agnostic target alias hit | 0.3747 | 0.2963 |
+| Name-agnostic target keyword hit rate | 0.2631 | 0.2303 |
+| Name-agnostic target mass | 0.0477 | 0.0274 |
+| BLUR/mixed forget target alias hit | 0.0361 | 0.0264 |
+| Matched-control retain alias hit | 0.8000 | 0.8333 |
+| Neighbor-locality retain alias hit | 0.7944 | 0.7500 |
+| Generic benign refusal-like | 0.0000 | 0.0000 |
+| Adversarial target alias hit | 0.4444 | 0.3590 |
+| Adversarial target keyword hit rate | 0.2705 | 0.2457 |
+| Adversarial target mass | 0.0709 | 0.0377 |
+| Adversarial recovery success | 0.9013 | 0.8333 |
+| RWKU forget alias hit | 0.7767 | 0.6404 |
+| RWKU forget keyword hit rate | 0.3458 | 0.2595 |
+| RWKU forget target mass | 0.1419 | 0.0858 |
+
+**Judgment for Weakness 2:** These are strong rebuttal results, but they must be framed carefully. SimNPO nearly eliminates EL10, yet direct SMR remains 77.78%, adversarial recovery is 90.13%, and RWKU forget alias hit is 77.67%. OPT-OUT does not solve the setting either: direct SMR remains 77.78%, EL10 ratio is 1.0255, adversarial recovery is 83.33%, and RWKU forget alias hit is 64.04%. The useful conclusion is not that ERUF dominates every scalar metric. The useful conclusion is that Qwen 3B remains a baseline-tradeoff regime: low EL10, utility preservation, and full-parameter training do not by themselves imply robust entity forgetting.
 
 **Suggested rebuttal wording:**
 
-> We added a full-parameter SimNPO evaluation on the Qwen 3B setting. SimNPO strongly reduces the direct EL10 ratio to 0.00056 and retains benign utility reasonably well, but it does not achieve behavioral or robust forgetting: direct SMR is 77.78%, adversarial recovery success is 90.13%, and RWKU-style forget alias hit is 77.67%. These results are important because they show that even a very low internal target-mass diagnostic does not by itself imply successful entity unlearning. Together with the LUNAR and ReGLU results, the Qwen 3B baselines exhibit complementary failure modes rather than a clean solution to the small-model regime. We therefore revise our claim to a joint one: ERUF offers a better balance across surface suppression, internal attenuation, robust recoverability, and utility, rather than dominating every baseline on every individual metric.
+> We added full-parameter SimNPO and OPT-OUT evaluations on Qwen 3B. SimNPO strongly reduces the direct EL10 ratio to 0.00056 and retains benign utility reasonably well, but it does not achieve behavioral or robust forgetting: direct SMR is 77.78%, adversarial recovery success is 90.13%, and RWKU-style forget alias hit is 77.67%. OPT-OUT also does not solve the setting: direct SMR is 77.78%, EL10 ratio is 1.0255, adversarial recovery success is 83.33%, and RWKU-style forget alias hit is 64.04%. These results show that neither low internal target mass nor utility-preserving full-parameter optimization is sufficient for robust entity unlearning. Together with LUNAR and ReGLU, the Qwen 3B baselines exhibit complementary failure modes rather than a clean solution. We therefore state our claim jointly: ERUF offers a better balance across surface suppression, internal attenuation, robust recoverability, and utility, rather than dominating every baseline on every individual metric.
 
 **Cross-run caveat:** All Qwen 3B baseline rows should be treated as `Qwen/Qwen2.5-3B`; earlier `Instruct` labels were a logging artifact. The LUNAR/ReGLU direct rows used a smaller 5-subject direct evaluation, while the SimNPO/OPT-OUT base-checkpoint runs used the 9 available forgotten subjects. Their numerical values are useful as baseline context, but subject-set and evaluation-protocol differences should still be disclosed.
-
-### Qwen 3B OPT-OUT
-
-| Item | Result |
-|---|---|
-| Method | Full-parameter OPT-OUT (`npo+rt+wd+ot`) |
-| Model | `Qwen/Qwen2.5-3B` |
-| Trainable parameters | 3,085,938,688 / 3,085,938,688 |
-| Reference model | Loaded successfully |
-| Standard optimizer attempt | CUDA OOM at the first Adam optimizer step on the 24 GB GPU |
-| Memory-feasible rerun | Completed with `PagedAdamW8bit` on RTX 3090 24 GB |
-| Training wall-clock | 0.3501 h (about 21 min) |
-| Evaluation status | SMR/EL10 and saved-suite evaluation pending |
-| Report as comparative metric? | Not until evaluation finishes |
-
-**Interpretation:** The completed rerun establishes that full-parameter Qwen 3B OPT-OUT is feasible on 24 GB when the optimizer state is memory-reduced. It is not bit-for-bit identical to the standard-Adam implementation, so the optimizer change must be disclosed. No forgetting-quality claim should be made until the direct and robustness evaluations finish.
 
 ## 9. Recovered 3B training wall-clock and parameter counts
 
@@ -258,17 +250,16 @@ The following values were recovered from completed training logs across the RTX 
 
 | Model | Method | Hardware | Wall-clock (h) | Approx. duration | Trainable parameters | Run note |
 |---|---|---|---:|---:|---:|---|
-| Qwen2.5-3B | LUNAR | RTX 3090 24 GB | 0.0135 | 49 s | N/A | Clean closed-form rerun for timing; no optimizer trainable-parameter count was logged |
+| Qwen2.5-3B | LUNAR | RTX 3090 24 GB | 0.0135 | 49 s | N/A | Clean closed-form rerun for timing |
 | Qwen2.5-3B | ReGLU | RTX 5060 Ti | 0.4757 | 28 min 33 s | 59,867,136 | CPU-RILA run; explicit end-to-end wall-clock from the handover record |
 | Qwen2.5-3B | SimNPO | RTX 3090 24 GB | 0.3478 | 20 min 52 s | 3,085,938,688 | Full-parameter PagedAdamW32bit run |
 | Qwen2.5-3B | OPT-OUT | RTX 3090 24 GB | 0.3501 | 21 min 00 s | 3,085,938,688 | Full-parameter PagedAdamW8bit memory-feasible rerun |
-| Llama-3.2-3B | LUNAR | RTX 3090 24 GB | 0.0093 | 33 s | N/A | Clean closed-form rerun for timing; no optimizer trainable-parameter count was logged |
+| Llama-3.2-3B | LUNAR | RTX 3090 24 GB | 0.0093 | 33 s | N/A | Clean closed-form rerun for timing |
 | Llama-3.2-3B | ReGLU | RTX 3090 24 GB | 0.1950 | 11 min 42 s | 48,627,712 | LoRA/ReGLU training log recovered |
 | Llama-3.2-3B | SimNPO | RTX 3090 24 GB | 0.2342 | 14 min 03 s | 3,212,749,824 | Full-parameter PagedAdamW32bit run |
 | Llama-3.2-3B | OPT-OUT | RTX 3090 24 GB | 1.4055 | 1 h 24 min 20 s | 3,212,749,824 | Full-parameter retain-fixed run |
 
-**Timing caveat:** The LUNAR rows use clean timing reruns on the RTX 3090: Llama LUNAR reported 33.354 seconds (0.009265 h), and Qwen LUNAR reported 48.688 seconds (0.013525 h). These LUNAR values are timing-only reruns and should not replace the already reported LUNAR metric evaluations. The Qwen ReGLU log parser recovered a 0.3542 h timestamp span, while the handover records an explicit end-to-end wall-clock of 28:32.69 (0.4757 h); the table uses the explicit end-to-end record. The uploaded Llama OPT-OUT `technique4_optout_train.log` is the earlier retain-pool failure and is not the completed retain-fixed OPT-OUT run used in the table.
-
+**Timing caveat:** The Qwen ReGLU log parser recovered a 0.3542 h timestamp span, while the handover records an explicit end-to-end wall-clock of 28:32.69 (0.4757 h). The table uses the explicit end-to-end record. The Llama and Qwen LUNAR rows use clean RTX 3090 reruns with explicit wall-clock fields: 33.354 s for Llama and 48.688 s for Qwen. The uploaded Llama OPT-OUT `technique4_optout_train.log` is the earlier retain-pool failure and is not the completed retain-fixed OPT-OUT run used in the table.
 
 ## Current combined story for rebuttal
 
@@ -276,16 +267,16 @@ The following values were recovered from completed training logs across the RTX 
 |---|---|
 | Layer choice looks heuristic | Layer-band ablation shows the selected high-salience band is empirically strongest among tested bands |
 | alpha_eff needs ablation | Mechanistic alpha_eff sweep shows monotonic target-signature attenuation |
-| Baselines missing in weak 3B setting | Llama 3B has four completed baselines; Qwen 3B has completed LUNAR, ReGLU, and full-parameter SimNPO evidence |
+| Baselines missing in weak 3B setting | Llama 3B has four completed baselines; Qwen 3B now has completed LUNAR, ReGLU, SimNPO, and OPT-OUT evidence |
 | Baselines might solve small-model cases | No completed baseline cleanly satisfies surface suppression, internal attenuation, robust non-recoverability, and utility simultaneously |
-| Reviewer expects baselines to fail beyond ERUF in Qwen 3B | SimNPO has 77.78% direct SMR and 90.13% adversarial recovery, far worse than ERUF's reported Qwen 3B surface leakage, despite an extremely low EL10 |
+| Reviewer expects baselines to fail beyond ERUF in Qwen 3B | SimNPO has 77.78% direct SMR and 90.13% adversarial recovery despite extremely low EL10; OPT-OUT has 77.78% direct SMR and 83.33% adversarial recovery |
 | Direct leakage or EL10 alone may be insufficient | ReGLU shows low direct alias/EL10 with high adversarial recovery; SimNPO shows extremely low EL10 with catastrophic surface and adversarial recovery |
 | Hidden-space clustering missing | Weakness 5 clustering/recoverability diagnostic shows reduced subject-level separability after ERUF under subject-name-excluded pooling |
-| OPT-OUT memory feasibility | Llama 3B OPT-OUT completed normally; Qwen 3B standard Adam OOMed, but a full-parameter PagedAdamW8bit rerun completed training and is awaiting evaluation |
+| OPT-OUT memory feasibility and quality | Llama 3B OPT-OUT completed normally; Qwen 3B standard Adam OOMed, but a full-parameter PagedAdamW8bit rerun completed and still showed high direct and robust recovery |
 
 ## Recommended paper framing
 
-> We added targeted rebuttal experiments addressing layer selection, alpha_eff behavior, missing small-model baseline context, and hidden-space clustering. A layer-band sensitivity check supports data-driven high-salience capsule placement, while a controlled alpha_eff sweep shows monotonic target-signature attenuation under the capsule intervention. The additional 3B baseline experiments directly address the reviewer's concern that existing methods might outperform ERUF where ERUF struggles. On Llama 3B, LUNAR, ReGLU, SimNPO, and OPT-OUT expose complementary leakage-versus-utility failures. On Qwen 3B, full-parameter SimNPO nearly eliminates EL10 but still yields 77.78% direct SMR, 90.13% adversarial recovery, and 77.67% RWKU forget alias recovery. Alongside LUNAR's utility/internal failure and ReGLU's destructive utility and robust-recovery tradeoff, these results show that the small-model regime is not cleanly solved by existing baselines. Our claim should be stated jointly: ERUF offers a stronger balance across surface suppression, internal attenuation, robust non-recoverability, and utility preservation, not universal dominance on every individual scalar metric. The new clustering diagnostic further supports an attenuation interpretation, but we do not claim formal irreversible deletion of the full entity manifold.
+> We added targeted rebuttal experiments addressing layer selection, alpha_eff behavior, missing small-model baseline context, hidden-space clustering, and compute/runtime context. A layer-band sensitivity check supports data-driven high-salience capsule placement, while a controlled alpha_eff sweep shows monotonic target-signature attenuation under the capsule intervention. The additional 3B baseline experiments directly address the reviewer's concern that existing methods might outperform ERUF where ERUF struggles. On Llama 3B, LUNAR, ReGLU, SimNPO, and OPT-OUT expose complementary leakage-versus-utility failures. On Qwen 3B, full-parameter SimNPO nearly eliminates EL10 but still yields 77.78% direct SMR, 90.13% adversarial recovery, and 77.67% RWKU forget alias recovery. The completed Qwen OPT-OUT rerun also does not solve the setting: direct SMR remains 77.78%, EL10 ratio is 1.0255, adversarial recovery is 83.33%, and RWKU forget alias hit is 64.04%. Alongside LUNAR's utility/internal failure and ReGLU's destructive utility and robust-recovery tradeoff, these results show that the small-model regime is not cleanly solved by existing baselines. Our claim should be stated jointly: ERUF offers a stronger balance across surface suppression, internal attenuation, robust non-recoverability, and utility preservation, not universal dominance on every individual scalar metric. The new clustering diagnostic further supports an attenuation interpretation, but we do not claim formal irreversible deletion of the full entity manifold.
 
 ## What not to overclaim
 
@@ -294,7 +285,7 @@ The following values were recovered from completed training logs across the RTX 
 - Do not claim ReGLU fails to forget on Qwen 3B. It forgets strongly in the direct evaluator, but damages utility and remains adversarially recoverable.
 - Do not claim LUNAR is better overall than ReGLU. Their failure modes differ.
 - Do not claim OPT-OUT fails completely. It preserves utility and lowers EL10 on Llama 3B, but retains high surface/adversarial/RWKU recoverability.
-- Do not use the Qwen 3B OPT-OUT OOM as evidence of inferior unlearning quality. It is only a resource-limit result.
+- Do not use the standard-Adam Qwen 3B OPT-OUT OOM as evidence of inferior unlearning quality. The PagedAdamW8bit rerun completed and was evaluated, but the optimizer change must be disclosed.
 - Do not present LUNAR/ReGLU/SimNPO Qwen numbers as a perfectly matched ranking without noting the checkpoint and subject-set differences.
 - Do not present the alpha_eff ablation as end-to-end unlearning performance.
 - Do not describe the Weakness 5 clustering result as formal erasure.
@@ -305,9 +296,8 @@ The following values were recovered from completed training logs across the RTX 
 |---:|---|---|---|
 | 1 | Compile final 8B runtime/cost table from logs | 24 GB VRAM PC | Directly answers computational-cost concern |
 | 2 | Run Module 8 only if full ERUF behavioral metrics are still needed | 24 GB VRAM PC | Adapter exists, but Module 8 gives the final standard evaluation table |
-| 3 | Finish Qwen 3B OPT-OUT direct and saved-suite evaluation | RTX 3090 24 GB | Training completed with PagedAdamW8bit; evaluation is needed before using it in the rebuttal |
-| 4 | DeepSeek 3B baselines only if rebuttal time and compute permit | Larger GPU/cluster | Would broaden Weakness 2 coverage, but current Llama and Qwen evidence already answers the core concern |
+| 3 | DeepSeek 3B baselines only if rebuttal time and compute permit | Larger GPU/cluster | Would broaden Weakness 2 coverage, but current Llama and Qwen evidence already answers the core concern |
 
 ## Best use of RTX 5060 Ti next
 
-The 5060 Ti has already produced the useful Qwen 3B LUNAR/ReGLU evidence, while the 24 GB RTX 3090 has completed the full-parameter Qwen 3B SimNPO run and the memory-feasible full-parameter OPT-OUT rerun. The immediate priority is to finish Qwen OPT-OUT evaluation, then compile the final 8B runtime/cost table and rebuttal synthesis.
+The 5060 Ti has already produced the useful Qwen 3B LUNAR/ReGLU evidence, while the 24 GB RTX 3090 has completed the full-parameter Qwen 3B SimNPO and OPT-OUT evaluations. The immediate priority is the final 8B runtime/cost table and rebuttal synthesis, not more Qwen 3B baseline runs.
