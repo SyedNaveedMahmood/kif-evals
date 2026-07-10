@@ -258,16 +258,17 @@ The following values were recovered from completed training logs across the RTX 
 
 | Model | Method | Hardware | Wall-clock (h) | Approx. duration | Trainable parameters | Run note |
 |---|---|---|---:|---:|---:|---|
-| Qwen2.5-3B | LUNAR | RTX 5060 Ti | 0.0273 | 1 min 38 s | N/A | Closed-form edit; no optimizer trainable-parameter count was logged |
+| Qwen2.5-3B | LUNAR | RTX 3090 24 GB | 0.0135 | 49 s | N/A | Clean closed-form rerun for timing; no optimizer trainable-parameter count was logged |
 | Qwen2.5-3B | ReGLU | RTX 5060 Ti | 0.4757 | 28 min 33 s | 59,867,136 | CPU-RILA run; explicit end-to-end wall-clock from the handover record |
 | Qwen2.5-3B | SimNPO | RTX 3090 24 GB | 0.3478 | 20 min 52 s | 3,085,938,688 | Full-parameter PagedAdamW32bit run |
 | Qwen2.5-3B | OPT-OUT | RTX 3090 24 GB | 0.3501 | 21 min 00 s | 3,085,938,688 | Full-parameter PagedAdamW8bit memory-feasible rerun |
-| Llama-3.2-3B | LUNAR | RTX 3090 24 GB | N/A | N/A | N/A | LUNAR output/evaluation exists, but the training/edit wall-clock was not recovered from the available logs |
+| Llama-3.2-3B | LUNAR | RTX 3090 24 GB | 0.0093 | 33 s | N/A | Clean closed-form rerun for timing; no optimizer trainable-parameter count was logged |
 | Llama-3.2-3B | ReGLU | RTX 3090 24 GB | 0.1950 | 11 min 42 s | 48,627,712 | LoRA/ReGLU training log recovered |
 | Llama-3.2-3B | SimNPO | RTX 3090 24 GB | 0.2342 | 14 min 03 s | 3,212,749,824 | Full-parameter PagedAdamW32bit run |
 | Llama-3.2-3B | OPT-OUT | RTX 3090 24 GB | 1.4055 | 1 h 24 min 20 s | 3,212,749,824 | Full-parameter retain-fixed run |
 
-**Timing caveat:** The Qwen ReGLU log parser recovered a 0.3542 h timestamp span, while the handover records an explicit end-to-end wall-clock of 28:32.69 (0.4757 h). The table uses the explicit end-to-end record. The uploaded Llama LUNAR log confirms the LUNAR evaluation/output path and metrics, but not the original closed-form edit wall-clock, so that runtime is not fabricated. The uploaded Llama OPT-OUT `technique4_optout_train.log` is the earlier retain-pool failure and is not the completed retain-fixed OPT-OUT run used in the table.
+**Timing caveat:** The LUNAR rows use clean timing reruns on the RTX 3090: Llama LUNAR reported 33.354 seconds (0.009265 h), and Qwen LUNAR reported 48.688 seconds (0.013525 h). These LUNAR values are timing-only reruns and should not replace the already reported LUNAR metric evaluations. The Qwen ReGLU log parser recovered a 0.3542 h timestamp span, while the handover records an explicit end-to-end wall-clock of 28:32.69 (0.4757 h); the table uses the explicit end-to-end record. The uploaded Llama OPT-OUT `technique4_optout_train.log` is the earlier retain-pool failure and is not the completed retain-fixed OPT-OUT run used in the table.
+
 
 ## Current combined story for rebuttal
 
